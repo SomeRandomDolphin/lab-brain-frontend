@@ -1,5 +1,6 @@
 "use client";
 import { create } from "zustand";
+import type { Room, RemoteParticipant, LocalParticipant } from "livekit-client";
 import type { TranscriptEvent, AgentReplyEvent, PerceptionEvent, ConvMode } from "@/types";
 
 export interface TranscriptEntry extends TranscriptEvent {
@@ -11,12 +12,23 @@ export interface AgentEntry extends AgentReplyEvent {
   receivedAt: number;
 }
 
+export type AnyParticipant = RemoteParticipant | LocalParticipant;
+
 interface SessionStore {
   // LiveKit
   sessionId: string | null;
   lkToken: string | null;
   lkUrl: string | null;
   isLive: boolean;
+
+  // Room & participants (not serialisable — kept as live refs)
+  room: Room | null;
+  participants: AnyParticipant[];
+  micEnabled: boolean;
+  camEnabled: boolean;
+
+  // Whether we are joining someone else's session
+  isGuest: boolean;
 
   // State
   mode: ConvMode;
@@ -42,6 +54,11 @@ interface SessionStore {
   setSession: (sessionId: string, token: string, url: string) => void;
   clearSession: () => void;
   setLive: (v: boolean) => void;
+  setRoom: (room: Room | null) => void;
+  setParticipants: (p: AnyParticipant[]) => void;
+  setMicEnabled: (v: boolean) => void;
+  setCamEnabled: (v: boolean) => void;
+  setGuest: (v: boolean) => void;
   setMode: (mode: ConvMode) => void;
   setSummoned: (v: boolean) => void;
   setListening: (v: boolean) => void;
@@ -56,6 +73,11 @@ export const useSessionStore = create<SessionStore>()((set) => ({
   lkToken: null,
   lkUrl: null,
   isLive: false,
+  room: null,
+  participants: [],
+  micEnabled: true,
+  camEnabled: true,
+  isGuest: false,
   mode: "idle",
   summoned: false,
   isListening: false,
@@ -73,12 +95,19 @@ export const useSessionStore = create<SessionStore>()((set) => ({
   clearSession: () =>
     set({
       sessionId: null, lkToken: null, lkUrl: null,
-      isLive: false, mode: "idle", summoned: false, isListening: false,
+      isLive: false, room: null, participants: [],
+      micEnabled: true, camEnabled: true, isGuest: false,
+      mode: "idle", summoned: false, isListening: false,
       transcripts: [], agentReplies: [], lastAgentText: null,
       presentSpeakers: [], engagementCues: {}, sceneSummary: "", environmentState: {},
       summary: null, summaryLoading: false,
     }),
   setLive: (isLive) => set({ isLive }),
+  setRoom: (room) => set({ room }),
+  setParticipants: (participants) => set({ participants }),
+  setMicEnabled: (micEnabled) => set({ micEnabled }),
+  setCamEnabled: (camEnabled) => set({ camEnabled }),
+  setGuest: (isGuest) => set({ isGuest }),
   setMode: (mode) => set({ mode }),
   setSummoned: (summoned) => set({ summoned }),
   setListening: (isListening) => set({ isListening }),

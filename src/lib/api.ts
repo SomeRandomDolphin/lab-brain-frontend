@@ -25,7 +25,17 @@ export const api = {
 
   getToken: (session_id: string, identity?: string) =>
     request<{ session_id: string; token: string; lk_url: string }>(
-      `/livekit/token?session_id=${session_id}${identity ? `&identity=${identity}` : ""}`
+      `/livekit/token?session_id=${session_id}${identity ? `&identity=${encodeURIComponent(identity)}` : ""}`
+    ),
+
+  /**
+   * Join an existing room as a guest — gets a participant token for an
+   * already-running session without creating a new one or starting the
+   * backend pipeline again.
+   */
+  joinRoom: (session_id: string, identity: string) =>
+    request<{ session_id: string; token: string; lk_url: string }>(
+      `/livekit/token?session_id=${session_id}&identity=${encodeURIComponent(identity)}`
     ),
 
   getRoomStatus: (session_id: string) =>
