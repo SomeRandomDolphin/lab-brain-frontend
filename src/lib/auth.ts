@@ -1,70 +1,135 @@
 /**
- * Local auth layer — stores users in localStorage so the frontend
- * works without a dedicated auth backend. Swap the `authService.*`
- * functions below for real API calls when you add a /auth/* backend.
+ * authService — all calls go to YOUR backend /auth/* endpoints.
+ * No third-party SDK involved; the backend owns all auth logic.
  */
 import type { User } from "@/types";
 
-const USERS_KEY = "labbrain_users";
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
-interface StoredUser extends User {
-  passwordHash: string;
+const TOKEN_KEY = "labbrain_token";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function saveToken(token: string) {
+  if (typeof window !== "undefined") localStorage.setItem(TOKEN_KEY, token);
 }
 
-function getUsers(): StoredUser[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]");
-  } catch {
-    return [];
+function clearToken() {
+  if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...init,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { detail?: string }).detail ?? `HTTP ${res.status}`);
   }
+  return res.json() as Promise<T>;
 }
 
-function saveUsers(users: StoredUser[]): void {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-// Very simple hash — good enough for a local mock; replace in production.
-async function hashPassword(password: string): Promise<string> {
-  const buf = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(password)
-  );
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+// ── Public API ────────────────────────────────────────────────────────────────
 
 export const authService = {
-  async register(name: string, email: string, password: string): Promise<User> {
-    const users = getUsers();
-    if (users.find((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      throw new Error("An account with that email already exists.");
-    }
-    const passwordHash = await hashPassword(password);
-    const user: StoredUser = {
-      id: crypto.randomUUID(),
-      name,
-      email,
-      passwordHash,
-      createdAt: new Date().toISOString(),
-    };
-    saveUsers([...users, user]);
-    const { passwordHash: _, ...safe } = user;
-    void _;
-    return safe;
+  /**
+   * POST /auth/register
+   * Body: { name, email, password }
+   * Returns: { user: User, token: string }
+   */
+  async register(
+    name: string,
+    email: string,
+    password: string,
+  ): Promise<{ user: User; token: string }> {
+    const data = await request<{ user: User; token: string }>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ name, email, password }),
+    });
+    saveToken(data.token);
+    return data;
   },
 
-  async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    const users = getUsers();
-    const stored = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (!stored) throw new Error("No account found with that email.");
-    const hash = await hashPassword(password);
-    if (hash !== stored.passwordHash) throw new Error("Incorrect password.");
-    const { passwordHash: _, ...user } = stored;
-    void _;
-    // Mint a simple opaque session token
-    const token = btoa(`${user.id}:${Date.now()}`);
-    return { user, token };
+  /**
+   * POST /auth/login
+   * Body: { email, password }
+   * Returns: { user: User, token: string }
+   */
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ user: User; token: string }> {
+    const data = await request<{ user: User; token: string }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    saveToken(data.token);
+    return data;
+  },
+
+  /**
+   * POST /auth/logout
+   * Header: Authorization: Bearer <token>
+   * Invalidates the token server-side, then clears it from localStorage.
+   */
+  async logout(): Promise<void> {
+    await request("/auth/logout", { method: "POST" }).catch(() => {});
+    clearToken();
+  },
+
+  /**
+   * GET /auth/me
+   * Header: Authorization: Bearer <token>
+   * Returns: { user: User }
+   * Used on every page load to rehydrate the Zustand store.
+   */
+  async me(): Promise<{ user: User; token: string } | null> {
+    const token = getStoredToken();
+    if (!token) return null;
+    try {
+      const data = await request<{ user: User }>("/auth/me");
+      return { user: data.user, token };
+    } catch {
+      // Token is expired or invalid — clean up
+      clearToken();
+      return null;
+    }
+  },
+
+  /**
+   * POST /auth/forgot-password
+   * Body: { email }
+   * Triggers a password-reset email on the backend.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    await request("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  /**
+   * POST /auth/reset-password
+   * Body: { token: string, password: string }
+   * `token` comes from the reset link the backend emails.
+   */
+  async resetPassword(resetToken: string, password: string): Promise<void> {
+    await request("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token: resetToken, password }),
+    });
   },
 };

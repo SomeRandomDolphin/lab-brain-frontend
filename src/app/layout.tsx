@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AuthProvider } from "@/components/layout/AuthProvider";
 
 export const metadata: Metadata = {
   title: "Lab Brain",
@@ -19,8 +20,15 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="bg-ink-950 text-neutral-50 antialiased" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
-        {children}
+      <body
+        className="bg-ink-950 text-neutral-50 antialiased"
+        style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+      >
+        {/*
+          AuthProvider restores the Supabase session on first mount and
+          keeps the Zustand auth store in sync with auth state changes.
+        */}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

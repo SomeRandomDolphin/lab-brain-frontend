@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authService } from "@/lib/auth";
@@ -7,26 +7,33 @@ import { useAuthStore } from "@/store/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const login = useAuthStore((s) => s.login);
+  const { login, user, loading } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Already authenticated → go straight to dashboard
+  useEffect(() => {
+    if (!loading && user) router.replace("/dashboard");
+  }, [user, loading, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setSubmitting(true);
     try {
-      const { user, token } = await authService.login(email, password);
-      login(user, token);
+      const { user: u, token } = await authService.login(email, password);
+      login(u, token);
       router.push("/dashboard");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="min-h-screen bg-ink-950 flex items-center justify-center px-4">
@@ -76,10 +83,19 @@ export default function LoginPage() {
                 className="w-full px-4 py-2.5 rounded-xl bg-ink-900 border border-rim text-sm placeholder:text-neutral-600 focus:border-signal/50 focus:outline-none transition-colors"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-neutral-400 mb-1.5" htmlFor="password">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-neutral-400" htmlFor="password">
+                  Password
+                </label>
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-[11px] text-neutral-600 hover:text-signal-light transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 id="password"
                 type="password"
@@ -91,12 +107,20 @@ export default function LoginPage() {
                 className="w-full px-4 py-2.5 rounded-xl bg-ink-900 border border-rim text-sm placeholder:text-neutral-600 focus:border-signal/50 focus:outline-none transition-colors"
               />
             </div>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={submitting}
               className="w-full py-2.5 rounded-xl bg-signal hover:bg-signal-light disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all shadow-signal mt-2"
             >
-              {loading ? "Signing in…" : "Sign in"}
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-3.5 h-3.5 border border-white/40 border-t-white rounded-full animate-spin" />
+                  Signing in…
+                </span>
+              ) : (
+                "Sign in"
+              )}
             </button>
           </form>
 
@@ -108,6 +132,14 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-ink-950 flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full border-2 border-signal/30 border-t-signal animate-spin" />
     </div>
   );
 }

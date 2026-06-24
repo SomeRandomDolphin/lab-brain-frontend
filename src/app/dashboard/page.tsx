@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
+import { authService } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { initials } from "@/lib/utils";
 
@@ -13,13 +14,13 @@ interface SessionRecord {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, logout, loading } = useAuthStore();
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
 
   useEffect(() => {
-    if (!user) { router.replace("/auth/login"); return; }
+    if (!loading && !user) { router.replace("/auth/login"); return; }
 
     api.listSessions()
       .then((r) => setSessions((r.sessions ?? []).map((s) => ({ session_id: s }))))
@@ -31,7 +32,8 @@ export default function DashboardPage() {
       .finally(() => setLoadingMetrics(false));
   }, [user, router]);
 
-  function handleLogout() {
+  async function handleLogout() {
+    await authService.logout();
     logout();
     router.push("/");
   }
