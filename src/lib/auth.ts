@@ -4,7 +4,7 @@
  */
 import type { User } from "@/types";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
 const TOKEN_KEY = "labbrain_token";
 

@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
 async function request<T>(
   path: string,
@@ -62,15 +62,28 @@ export const api = {
 
   // ── Summary ───────────────────────────────────────────────────────────────
   postSummary: (session_id: string) =>
-    request<{ session_id: string; summary: string }>(`/summary/${session_id}`, {
-      method: "POST",
-    }),
+    request<{ session_id: string; summary: string; report_url?: string | null; error?: string }>(
+      `/summary/${session_id}`,
+      { method: "POST" }
+    ),
 
   // ── Metrics ───────────────────────────────────────────────────────────────
   getMetrics: () => request<Record<string, unknown>>("/metrics"),
 
   // ── LKC sessions ─────────────────────────────────────────────────────────
-  listSessions: () => request<{ sessions: string[] }>("/lkc/sessions"),
+  listSessions: () =>
+    request<{
+      sessions: {
+        session_id:    string;
+        started_iso:   string;
+        ended_iso:     string;
+        total_records: number;
+        transcripts:   number;
+        vision_frames: number;
+        agent_replies: number;
+        summaries:     number;
+      }[];
+    }>("/lkc/sessions"),
 
   getSession: (session_id: string) =>
     request<{ session_id: string; count: number; records: unknown[] }>(

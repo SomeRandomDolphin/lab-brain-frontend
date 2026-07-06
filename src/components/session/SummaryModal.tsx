@@ -2,13 +2,19 @@
 import { useRouter } from "next/navigation";
 import { useSessionStore } from "@/store/session";
 
-export function SummaryModal() {
+export function SummaryModal({ onClose }: { onClose?: () => void }) {
   const router = useRouter();
   const { summary, summaryLoading, clearSession } = useSessionStore();
 
   function handleClose() {
     clearSession();
-    router.push("/dashboard");
+    if (onClose) {
+      // Caller (session page) handles navigation — return to lobby.
+      onClose();
+    } else {
+      // Standalone usage — go to dashboard.
+      router.push("/dashboard");
+    }
   }
 
   return (

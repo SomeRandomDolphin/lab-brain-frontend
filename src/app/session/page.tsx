@@ -31,6 +31,10 @@ export default function SessionPage() {
   const [showModal, setShowModal] = useState(true);
   // Whether to show the transcript panel as a right sidebar
   const [showTranscript, setShowTranscript] = useState(true);
+  // Tracks whether we just ended a session — keeps the session page mounted
+  // so <SummaryModal> stays visible. Cleared when the user dismisses the
+  // summary or starts/joins a new session.
+  const [hasEnded, setHasEnded] = useState(false);
 
   // Connect SSE when we have a session
   useSSE(sessionId);
@@ -46,10 +50,12 @@ export default function SessionPage() {
   }, [isLive]);
 
   function handleHost() {
+    setHasEnded(false);
     start();
   }
 
   function handleJoin(sid: string, displayName: string) {
+    setHasEnded(false);
     join(sid, displayName);
   }
 
@@ -57,11 +63,15 @@ export default function SessionPage() {
     await stop();
     if (isGuest) {
       router.push("/dashboard");
+    } else {
+      // Keep the session page mounted so <SummaryModal> can display.
+      // The modal's onClose will clear this flag and return to the lobby.
+      setHasEnded(true);
     }
   }
 
   // Show the pre-call chooser until connected
-  if (showModal || (!isLive && !starting)) {
+  if (showModal || (!isLive && !starting && !hasEnded)) {
     return (
       <JoinModal
         onHost={handleHost}
@@ -207,7 +217,9 @@ export default function SessionPage() {
       </div>
 
       {/* Summary modal (end of session) */}
-      {(summary !== null || summaryLoading) && <SummaryModal />}
+      {(summary !== null || summaryLoading) && (
+        <SummaryModal onClose={() => setHasEnded(false)} />
+      )}
     </div>
   );
 }

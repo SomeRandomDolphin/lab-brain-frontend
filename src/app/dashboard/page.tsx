@@ -8,8 +8,14 @@ import { api } from "@/lib/api";
 import { initials } from "@/lib/utils";
 
 interface SessionRecord {
-  session_id: string;
-  count?: number;
+  session_id:    string;
+  started_iso:   string;
+  ended_iso:     string;
+  total_records: number;
+  transcripts:   number;
+  vision_frames: number;
+  agent_replies: number;
+  summaries:     number;
 }
 
 export default function DashboardPage() {
@@ -23,7 +29,7 @@ export default function DashboardPage() {
     if (!loading && !user) { router.replace("/auth/login"); return; }
 
     api.listSessions()
-      .then((r) => setSessions((r.sessions ?? []).map((s) => ({ session_id: s }))))
+      .then((r) => setSessions(r.sessions ?? []))
       .catch(() => {});
 
     api.getMetrics()
@@ -142,16 +148,16 @@ export default function DashboardPage() {
                         Session #{s.session_id}
                       </div>
                       <div className="text-xs text-neutral-600 mt-0.5">
-                        {s.count ? `${s.count} records` : ""}
+                        {s.total_records} records · {s.transcripts}T · {s.vision_frames}V · {s.agent_replies}A
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => api.getSession(s.session_id).then(console.log)}
+                  <Link
+                    href={`/dashboard/sessions/${s.session_id}`}
                     className="text-xs text-signal-light hover:underline"
                   >
                     View records
-                  </button>
+                  </Link>
                 </div>
               ))}
             </div>

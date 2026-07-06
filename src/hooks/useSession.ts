@@ -68,6 +68,9 @@ export function useSession() {
   const start = useCallback(async () => {
     setError(null);
     setStarting(true);
+    // Clear any summary from a previous session so it doesn't bleed through
+    // when the new session page mounts.
+    store.setSummary(null, false);
     try {
       const { session_id, token, lk_url } = await api.createRoom();
       store.setSession(session_id, token, lk_url);
@@ -86,6 +89,8 @@ export function useSession() {
     async (sessionId: string, identity?: string) => {
       setError(null);
       setStarting(true);
+      // Clear any summary from a previous session.
+      store.setSummary(null, false);
       try {
         const { session_id, token, lk_url } = await api.getToken(sessionId, identity);
         store.setSession(session_id, token, lk_url);
@@ -140,17 +145,29 @@ export function useSession() {
     setStopping(true);
     try {
       if (sid && !isGuest) {
-        // Generate summary before teardown
+        // 1. Generate summary FIRST while the session is still live so the
+        //    LLM has access to the full transcript + LKC state.
         store.setSummary(null, true);
-        const result = await api.postSummary(sid).catch(() => null);
-        if (result) store.setSummary(result.summary, false);
-      }
+        try {
+          const result = await api.postSummary(sid);
+          store.setSummary(result?.summary ?? null, false);
+        } catch (err) {
+          console.warn("[useSession] postSummary failed (non-fatal):", err);
+          store.setSummary(null, false);
+        }
 
-      await roomRef.current?.disconnect();
-      roomRef.current = null;
+        // 2. Disconnect from LiveKit after summary is captured.
+        await roomRef.current?.disconnect().catch(() => null);
+        roomRef.current = null;
 
-      if (sid && !isGuest) {
-        await api.deleteRoom(sid).catch(() => null);
+        // 3. Delete the server-side room last (non-fatal if it fails).
+        await api.deleteRoom(sid).catch((err) =>
+          console.warn("[useSession] deleteRoom failed (non-fatal):", err)
+        );
+      } else {
+        // Guest: just disconnect, no summary or room deletion needed.
+        await roomRef.current?.disconnect().catch(() => null);
+        roomRef.current = null;
       }
     } finally {
       setStopping(false);

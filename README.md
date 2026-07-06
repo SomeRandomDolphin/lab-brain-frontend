@@ -15,7 +15,7 @@ LiveKit via WebRTC.
 |---|---|
 | Node.js | ≥ 18 |
 | npm | ≥ 9 |
-| Lab Brain backend | running on `localhost:8000` |
+| Lab Brain backend | running on `localhost:8080` |
 | LiveKit SFU | running on `localhost:7880` |
 
 Start the SFU with one command:
@@ -44,7 +44,7 @@ npm start
 Create `.env.local` (already included in the repo):
 
 ```
-NEXT_PUBLIC_API_BASE=http://localhost:8000
+NEXT_PUBLIC_API_BASE=http://localhost:8080
 NEXT_PUBLIC_LK_URL=ws://localhost:7880
 ```
 
