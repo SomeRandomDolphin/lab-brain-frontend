@@ -100,7 +100,13 @@ export const useSessionStore = create<SessionStore>()((set) => ({
       mode: "idle", summoned: false, isListening: false,
       transcripts: [], agentReplies: [], lastAgentText: null,
       presentSpeakers: [], engagementCues: {}, sceneSummary: "", environmentState: {},
-      summary: null, summaryLoading: false,
+      // summary/summaryLoading intentionally NOT reset here. useSession's
+      // stop() calls clearSession() in a `finally` right after fetching the
+      // summary — resetting it here wiped out the just-fetched summary
+      // before <SummaryModal> could ever show it. start()/join() already
+      // call setSummary(null, false) explicitly at the top of each flow to
+      // clear any stale summary before a new session begins, so this action
+      // doesn't need to duplicate that.
     }),
   setLive: (isLive) => set({ isLive }),
   setRoom: (room) => set({ room }),

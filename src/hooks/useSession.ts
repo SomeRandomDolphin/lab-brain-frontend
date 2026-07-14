@@ -53,6 +53,31 @@ export function useSession() {
 
       await room.connect(lk_url, token);
       await room.localParticipant.setMicrophoneEnabled(true);
+      // ── DEBUG: verify the mic track is actually live and unmuted ──────────────
+      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const mst = micPub?.track?.mediaStreamTrack;
+      console.log("[debug:mic]", {
+        hasPublication: !!micPub,
+        isMuted_livekit: micPub?.isMuted,
+        trackExists: !!mst,
+        readyState: mst?.readyState,       // expect "live"
+        muted_browser: mst?.muted,         // expect false
+        enabled: mst?.enabled,             // expect true
+        label: mst?.label,                 // device name — confirms which mic
+        settings: mst?.getSettings(),      // sampleRate, channelCount, deviceId, etc.
+      });
+
+      // ── DEBUG: list all audio input devices the browser can see ───────────────
+      navigator.mediaDevices.enumerateDevices().then((devices) => {
+        console.log(
+          "[debug:mic] available audio inputs:",
+          devices.filter((d) => d.kind === "audioinput").map((d) => ({
+            label: d.label,
+            deviceId: d.deviceId,
+          }))
+        );
+      });
+
       await room.localParticipant.setCameraEnabled(true);
 
       store.setRoom(room);
@@ -144,9 +169,46 @@ export function useSession() {
     const isGuest = store.isGuest;
     setStopping(true);
     try {
+      // ── Release hardware FIRST ─────────────────────────────────────────
+      // This used to run AFTER `await api.postSummary(sid)`, which calls the
+      // LLM and can take many seconds. During that whole window the mic/cam
+      // tracks were still live, so the browser's hardware capture indicator
+      // stayed on even though the user had already clicked "end session".
+      // Stopping tracks and disconnecting the room is now the very first
+      // thing that happens, independent of how long summarization takes.
+      //
+      // Explicitly calling .stop() (not just setMicrophoneEnabled/
+      // setCameraEnabled(false)) matters too: muting alone pauses the track
+      // but doesn't reliably call .stop() on the underlying
+      // MediaStreamTrack in every SDK path, which is what can make the
+      // camera/mic indicator look like it "turns back on" after ending.
+      const room = roomRef.current;
+      const micPub = room?.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const camPub = room?.localParticipant.getTrackPublication(Track.Source.Camera);
+
+      if (micPub?.track) {
+        micPub.track.stop();
+        await room?.localParticipant.unpublishTrack(micPub.track).catch(() => null);
+      }
+      if (camPub?.track) {
+        camPub.track.stop();
+        await room?.localParticipant.unpublishTrack(camPub.track).catch(() => null);
+      }
+      store.setMicEnabled(false);
+      store.setCamEnabled(false);
+
+      roomRef.current?.removeAllListeners();
+      await roomRef.current?.disconnect().catch(() => null);
+      roomRef.current = null;
+
+      // ── Now that hardware is off, tear down the backend room and wait ──
+      // for the summary. This can still take a while, but the user's
+      // mic/camera are already released by this point.
       if (sid && !isGuest) {
-        // 1. Generate summary FIRST while the session is still live so the
-        //    LLM has access to the full transcript + LKC state.
+        await api.deleteRoom(sid).catch((err) =>
+          console.warn("[useSession] deleteRoom failed (non-fatal):", err)
+        );
+
         store.setSummary(null, true);
         try {
           const result = await api.postSummary(sid);
@@ -155,23 +217,10 @@ export function useSession() {
           console.warn("[useSession] postSummary failed (non-fatal):", err);
           store.setSummary(null, false);
         }
-
-        // 2. Disconnect from LiveKit after summary is captured.
-        await roomRef.current?.disconnect().catch(() => null);
-        roomRef.current = null;
-
-        // 3. Delete the server-side room last (non-fatal if it fails).
-        await api.deleteRoom(sid).catch((err) =>
-          console.warn("[useSession] deleteRoom failed (non-fatal):", err)
-        );
-      } else {
-        // Guest: just disconnect, no summary or room deletion needed.
-        await roomRef.current?.disconnect().catch(() => null);
-        roomRef.current = null;
       }
     } finally {
       setStopping(false);
-      if (isGuest) store.clearSession();
+      store.clearSession(); // clear for host too, not just guest
     }
   }, [store]);
 
