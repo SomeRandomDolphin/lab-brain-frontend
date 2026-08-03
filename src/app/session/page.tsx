@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { useSession } from "@/hooks/useSession";
 import { useSSE } from "@/hooks/useSSE";
 import { useSessionStore } from "@/store/session";
+import { useShallow } from "zustand/react/shallow";
 import { VideoGrid } from "@/components/session/VideoGrid";
 import { ControlBar } from "@/components/session/ControlBar";
 import { JoinModal } from "@/components/session/JoinModal";
@@ -25,7 +26,21 @@ export default function SessionPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { start, join, stop, toggleMic, toggleCam, shareScreen, starting, stopping, error } = useSession();
-  const { sessionId, isLive, isGuest, summary, summaryLoading } = useSessionStore();
+  // Previously: const { sessionId, isLive, isGuest, summary, summaryLoading } = useSessionStore();
+  // That subscribes to the ENTIRE store — any set() call anywhere (e.g. the
+  // high-frequency `listening`/`perception` updates from useSSE) re-rendered
+  // this whole page and everything under it. useShallow scopes the
+  // subscription to just these 5 fields and only re-renders when one of
+  // THEM actually changes value.
+  const { sessionId, isLive, isGuest, summary, summaryLoading } = useSessionStore(
+    useShallow((s) => ({
+      sessionId: s.sessionId,
+      isLive: s.isLive,
+      isGuest: s.isGuest,
+      summary: s.summary,
+      summaryLoading: s.summaryLoading,
+    }))
+  );
 
   // Whether to show the pre-call modal (before any session started)
   const [showModal, setShowModal] = useState(true);

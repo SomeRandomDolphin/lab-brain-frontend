@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useSessionStore } from "@/store/session";
+import { useShallow } from "zustand/react/shallow";
 
 interface MetricSummary {
   asr_latency_mean_ms?: number;
@@ -11,7 +12,11 @@ interface MetricSummary {
 }
 
 export function MetricsBar() {
-  const { sessionId, isLive } = useSessionStore();
+  // Previously a bare useSessionStore() call — re-rendered on every store
+  // change even though this only reads 2 fields that change rarely.
+  const { sessionId, isLive } = useSessionStore(
+    useShallow((s) => ({ sessionId: s.sessionId, isLive: s.isLive }))
+  );
   const [metrics, setMetrics] = useState<MetricSummary | null>(null);
 
   useEffect(() => {

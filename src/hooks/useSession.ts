@@ -2,6 +2,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/auth";
 import { useSessionStore } from "@/store/session";
 import type { AnyParticipant } from "@/store/session";
 
@@ -97,7 +98,13 @@ export function useSession() {
     // when the new session page mounts.
     store.setSummary(null, false);
     try {
-      const { session_id, token, lk_url } = await api.createRoom();
+      // Use the logged-in account's actual name as the LiveKit identity/
+      // display name, instead of the backend's generic "browser-user"
+      // fallback — this is what shows up in the room roster and (via the
+      // vision known-identity fix) replaces "Person (anon)" in the
+      // transcript for the host.
+      const displayName = useAuthStore.getState().user?.name;
+      const { session_id, token, lk_url } = await api.createRoom(displayName);
       store.setSession(session_id, token, lk_url);
       store.setGuest(false);
       await _connect(session_id, token, lk_url);

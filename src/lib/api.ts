@@ -17,10 +17,13 @@ async function request<T>(
 
 // ── LiveKit room ────────────────────────────────────────────────────────────
 export const api = {
-  createRoom: () =>
+  createRoom: (display_name?: string) =>
     request<{ session_id: string; token: string; lk_url: string }>(
       "/livekit/room",
-      { method: "POST" }
+      {
+        method: "POST",
+        body: JSON.stringify(display_name ? { display_name } : {}),
+      }
     ),
 
   getToken: (session_id: string, identity?: string) =>

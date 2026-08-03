@@ -1,12 +1,25 @@
 "use client";
 import { useSessionStore } from "@/store/session";
+import { useShallow } from "zustand/react/shallow";
 import { speakerColor } from "@/lib/utils";
 
 export function EnvironmentPanel() {
+  // Previously a bare useSessionStore() call — subscribed to the whole
+  // store, so this panel re-rendered on every high-frequency "listening"
+  // event too, not just when perception/agent data actually changed.
   const {
     environmentState, sceneSummary, presentSpeakers,
     engagementCues, agentReplies, mode,
-  } = useSessionStore();
+  } = useSessionStore(
+    useShallow((s) => ({
+      environmentState: s.environmentState,
+      sceneSummary: s.sceneSummary,
+      presentSpeakers: s.presentSpeakers,
+      engagementCues: s.engagementCues,
+      agentReplies: s.agentReplies,
+      mode: s.mode,
+    }))
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -27,8 +40,8 @@ export function EnvironmentPanel() {
         {presentSpeakers.length > 0 && (
           <Section title="In the room">
             <div className="space-y-1.5">
-              {presentSpeakers.map((sp) => (
-                <div key={sp} className="flex items-center justify-between">
+              {presentSpeakers.map((sp, i) => (
+                <div key={`${sp}-${i}`} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div
                       className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"

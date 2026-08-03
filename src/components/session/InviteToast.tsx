@@ -1,9 +1,15 @@
 "use client";
 import { useState } from "react";
 import { useSessionStore } from "@/store/session";
+import { useShallow } from "zustand/react/shallow";
 
 export function InviteToast() {
-  const { sessionId, isGuest } = useSessionStore();
+  // Previously a bare useSessionStore() call — re-rendered on every store
+  // change (e.g. the "listening" flood) even though this only cares about
+  // 2 fields that change rarely (once per session).
+  const { sessionId, isGuest } = useSessionStore(
+    useShallow((s) => ({ sessionId: s.sessionId, isGuest: s.isGuest }))
+  );
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 

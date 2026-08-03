@@ -1,10 +1,20 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useSessionStore } from "@/store/session";
+import { useShallow } from "zustand/react/shallow";
 
 export function SummaryModal({ onClose }: { onClose?: () => void }) {
   const router = useRouter();
-  const { summary, summaryLoading, clearSession } = useSessionStore();
+  // Previously a bare useSessionStore() call — re-rendered this modal on
+  // every store change (including the high-frequency "listening" events)
+  // even though it only reads/uses these 3 fields.
+  const { summary, summaryLoading, clearSession } = useSessionStore(
+    useShallow((s) => ({
+      summary: s.summary,
+      summaryLoading: s.summaryLoading,
+      clearSession: s.clearSession,
+    }))
+  );
 
   function handleClose() {
     clearSession();

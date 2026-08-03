@@ -152,7 +152,7 @@ export function VideoTile({ participant, featured = false, className }: Props) {
             </span>
           )}
           {!isCamOn && (
-            <span className="w-5 h-5 rounded-full bg-neutral-700/80 flex items-center justify-center">
+            <span className="w-5 h-5 rounded-full bg-danger/80 flex items-center justify-center">
               <CamOffIcon />
             </span>
           )}

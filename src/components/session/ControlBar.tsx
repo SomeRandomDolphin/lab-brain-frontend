@@ -1,6 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/store/session";
+import { useShallow } from "zustand/react/shallow";
 
 interface Props {
   onToggleMic: () => void;
@@ -19,7 +20,16 @@ export function ControlBar({
   stopping,
   isGuest,
 }: Props) {
-  const { micEnabled, camEnabled, sessionId } = useSessionStore();
+  // Previously a bare useSessionStore() call — this bar sits in the hot
+  // control area and was re-rendering on every "listening"/"perception"
+  // update in the store even though it only reads these 3 fields.
+  const { micEnabled, camEnabled, sessionId } = useSessionStore(
+    useShallow((s) => ({
+      micEnabled: s.micEnabled,
+      camEnabled: s.camEnabled,
+      sessionId: s.sessionId,
+    }))
+  );
 
   return (
     <div className="flex items-center justify-center gap-3">
@@ -124,7 +134,12 @@ function ControlButton({
         active ? activeClass : inactiveClass
       )}
     >
-      {children}
+      {/* Icon color: grey while on/active, white while off/inactive — the
+          inactive background is already `bg-danger`, so a red icon on a red
+          background is what was making it disappear. */}
+      <span className={active ? "text-neutral-400" : "text-white"}>
+        {children}
+      </span>
       <span className="text-[10px] text-neutral-400">{label}</span>
     </button>
   );
@@ -135,8 +150,8 @@ function ControlButton({
 function MicIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <rect x="9" y="2" width="6" height="12" rx="3" stroke="white" strokeWidth="1.5" />
-      <path d="M5 10a7 7 0 0014 0M12 19v3M9 22h6" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5 10a7 7 0 0014 0M12 19v3M9 22h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -144,9 +159,9 @@ function MicIcon() {
 function MicOffIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M2 2l20 20" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V5a3 3 0 00-5.94-.6" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M17 16.95A7 7 0 015 10M12 19v3M9 22h6" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M2 2l20 20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V5a3 3 0 00-5.94-.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M17 16.95A7 7 0 015 10M12 19v3M9 22h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -154,8 +169,8 @@ function MicOffIcon() {
 function CamIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <rect x="2" y="7" width="15" height="10" rx="2" stroke="white" strokeWidth="1.5" />
-      <path d="M17 11l5-3v8l-5-3V11z" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
+      <rect x="2" y="7" width="15" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M17 11l5-3v8l-5-3V11z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -163,8 +178,8 @@ function CamIcon() {
 function CamOffIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M2 2l20 20" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M7 7H4a2 2 0 00-2 2v6a2 2 0 002 2h11M17 14.5l5 3V7l-4 2.5M11 7h6a2 2 0 012 2v.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 2l20 20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M7 7H4a2 2 0 00-2 2v6a2 2 0 002 2h11M17 14.5l5 3V7l-4 2.5M11 7h6a2 2 0 012 2v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
