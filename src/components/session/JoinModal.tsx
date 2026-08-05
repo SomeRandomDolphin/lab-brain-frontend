@@ -2,7 +2,7 @@
 import { useState } from "react";
 
 interface Props {
-  onJoin: (sessionId: string, displayName: string) => void;
+  onJoin: (sessionId: string) => void;
   onHost: () => void;
   loading: boolean;
   error: string | null;
@@ -11,12 +11,11 @@ interface Props {
 export function JoinModal({ onJoin, onHost, loading, error }: Props) {
   const [tab, setTab] = useState<"host" | "join">("host");
   const [sessionId, setSessionId] = useState("");
-  const [name, setName] = useState("");
 
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
-    if (!sessionId.trim() || !name.trim()) return;
-    onJoin(sessionId.trim(), name.trim());
+    if (!sessionId.trim()) return;
+    onJoin(sessionId.trim());
   }
 
   return (
@@ -103,7 +102,10 @@ export function JoinModal({ onJoin, onHost, loading, error }: Props) {
               <div className="text-center py-2">
                 <h2 className="text-base font-semibold text-white mb-1">Join a session</h2>
                 <p className="text-xs text-neutral-500">
-                  Enter the session ID shared by the host.
+                  Enter the session ID shared by the host. You&apos;ll join as{" "}
+                  {/* Display identity now comes from the logged-in account,
+                      not a typed name — see api.ts::getToken. */}
+                  your account.
                 </p>
               </div>
 
@@ -122,24 +124,9 @@ export function JoinModal({ onJoin, onHost, loading, error }: Props) {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-neutral-400 mb-1.5" htmlFor="displayName">
-                  Your display name
-                </label>
-                <input
-                  id="displayName"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Dr. Jane Smith"
-                  className="w-full px-4 py-2.5 rounded-xl bg-ink-900 border border-rim text-sm placeholder:text-neutral-600 focus:border-signal/50 focus:outline-none transition-colors"
-                />
-              </div>
-
               <button
                 type="submit"
-                disabled={loading || !sessionId.trim() || !name.trim()}
+                disabled={loading || !sessionId.trim()}
                 className="w-full py-3 rounded-xl bg-signal hover:bg-signal-light disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all shadow-signal"
               >
                 {loading ? (

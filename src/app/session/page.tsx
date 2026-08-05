@@ -69,9 +69,12 @@ export default function SessionPage() {
     start();
   }
 
-  function handleJoin(sid: string, displayName: string) {
+  // No more displayName param — identity now comes from the authenticated
+  // account, not a client-typed name. See useSession.ts::join and
+  // components/session/JoinModal.tsx.
+  function handleJoin(sid: string) {
     setHasEnded(false);
-    join(sid, displayName);
+    join(sid);
   }
 
   async function handleEnd() {

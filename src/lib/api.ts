@@ -1,11 +1,17 @@
+import { useAuthStore } from "@/store/auth";
+
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
 async function request<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
+  const token = useAuthStore.getState().token;
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...init,
   });
   if (!res.ok) {
@@ -26,19 +32,15 @@ export const api = {
       }
     ),
 
-  getToken: (session_id: string, identity?: string) =>
-    request<{ session_id: string; token: string; lk_url: string }>(
-      `/livekit/token?session_id=${session_id}${identity ? `&identity=${encodeURIComponent(identity)}` : ""}`
-    ),
-
   /**
-   * Join an existing room as a guest — gets a participant token for an
-   * already-running session without creating a new one or starting the
-   * backend pipeline again.
+   * Join an existing room. Identity is no longer client-supplied — the
+   * backend derives the LiveKit display identity from the authenticated
+   * user (name/email) via the Authorization header. See app/api/v1/
+   * endpoints/livekit.py::get_token.
    */
-  joinRoom: (session_id: string, identity: string) =>
+  getToken: (session_id: string) =>
     request<{ session_id: string; token: string; lk_url: string }>(
-      `/livekit/token?session_id=${session_id}&identity=${encodeURIComponent(identity)}`
+      `/livekit/token?session_id=${session_id}`
     ),
 
   getRoomStatus: (session_id: string) =>
@@ -108,6 +110,12 @@ export const api = {
 };
 
 // ── SSE helper ───────────────────────────────────────────────────────────────
+// EventSource can't send an Authorization header, so the access token is
+// passed as a query param instead — see app/api/deps.py::get_current_user's
+// query-param fallback (SSE-only; every other route still requires the
+// header and never receives ?token=).
 export function openSSE(session_id: string): EventSource {
-  return new EventSource(`${BASE}/events/${session_id}`);
+  const token = useAuthStore.getState().token;
+  const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+  return new EventSource(`${BASE}/events/${session_id}${qs}`);
 }

@@ -116,15 +116,21 @@ export function useSession() {
     }
   }, [store, _connect]);
 
-  /** Join an existing room by session ID (guest). */
+  /**
+   * Join an existing room by session ID.
+   *
+   * No `identity` param anymore — the backend derives the LiveKit display
+   * identity from the authenticated user (GET /livekit/token no longer
+   * trusts a client-supplied identity; see app/api/v1/endpoints/livekit.py).
+   */
   const join = useCallback(
-    async (sessionId: string, identity?: string) => {
+    async (sessionId: string) => {
       setError(null);
       setStarting(true);
       // Clear any summary from a previous session.
       store.setSummary(null, false);
       try {
-        const { session_id, token, lk_url } = await api.getToken(sessionId, identity);
+        const { session_id, token, lk_url } = await api.getToken(sessionId);
         store.setSession(session_id, token, lk_url);
         store.setGuest(true);
         await _connect(session_id, token, lk_url);
