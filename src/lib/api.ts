@@ -2,6 +2,23 @@ import { useAuthStore } from "@/store/auth";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 
+/**
+ * A 401 means the token is missing/expired/invalid — the backend has
+ * already rejected us, so there's nothing a per-page catch block can
+ * usefully retry. We clear the auth store and hard-redirect to /auth/login
+ * here, once, so every caller of `api.*` gets this behavior automatically
+ * instead of each page having to special-case it.
+ */
+function handleUnauthorized() {
+  useAuthStore.getState().logout();
+  if (typeof window !== "undefined") {
+    // Full navigation (not router.push) since this runs outside React and
+    // we want a clean reload of auth state, not just a client-side route
+    // change on top of now-stale store data.
+    window.location.href = "/auth/login";
+  }
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit
@@ -16,6 +33,9 @@ async function request<T>(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
+    if (res.status === 401) {
+      handleUnauthorized();
+    }
     throw new Error(err?.error ?? `HTTP ${res.status}`);
   }
   return res.json() as T;

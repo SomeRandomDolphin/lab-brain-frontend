@@ -1,0 +1,25 @@
+name: lab-brain
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle at build time — rebuild the
+        # image if these change (not just restart the container).
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8080}
+        NEXT_PUBLIC_LK_URL: ${NEXT_PUBLIC_LK_URL:-ws://localhost:7880}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    container_name: lab-brain-frontend
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+
+  # LiveKit SFU and the FastAPI backend (omni-agent-backend) are
+  # managed in another compose file. If this frontend needs to reach
+  # them over a shared Docker network rather than via published host
+  # ports, add `networks: [<external-network-name>]` here and to the
+  # other compose file's services, then point NEXT_PUBLIC_API_BASE /
+  # NEXT_PUBLIC_LK_URL at the container names on that network.
