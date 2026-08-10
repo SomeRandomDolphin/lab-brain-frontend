@@ -6,6 +6,7 @@ import { useAuthStore } from "@/store/auth";
 import { authService } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { initials } from "@/lib/utils";
+import { PrivacyConsentModal } from "@/components/dashboard/PrivacyConsentModal";
 
 interface SessionRecord {
   session_id:    string;
@@ -24,9 +25,17 @@ export default function DashboardPage() {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
+  const [showTosModal, setShowTosModal] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) { router.replace("/auth/login"); return; }
+
+    // tosAccepted is null/undefined until the user has answered the privacy
+    // modal once (see POST /privacy/tos-consent). Re-check on every mount,
+    // not just first login, in case they land here on a fresh session.
+    if (user && user.tosAccepted == null) {
+      setShowTosModal(true);
+    }
 
     api.listSessions()
       .then((r) => setSessions(r.sessions ?? []))
@@ -37,6 +46,15 @@ export default function DashboardPage() {
       .catch(() => {})
       .finally(() => setLoadingMetrics(false));
   }, [user, router]);
+
+  async function handleTosDecision(accepted: boolean) {
+    const result = await api.setTosConsent(accepted); // POST /privacy/tos-consent
+    useAuthStore.getState().updateUser({
+      tosAccepted: accepted,
+      tosAcceptedAt: result.tosAcceptedAt,
+    });
+    setShowTosModal(false);
+  }
 
   async function handleLogout() {
     await authService.logout();
@@ -53,6 +71,8 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-ink-950 flex flex-col">
+      {showTosModal && <PrivacyConsentModal onDecide={handleTosDecision} />}
+
       {/* Ambient */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-0 left-[20%] w-[600px] h-[400px] rounded-full bg-signal/6 blur-[120px]" />

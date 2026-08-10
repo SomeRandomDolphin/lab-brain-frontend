@@ -14,7 +14,7 @@ COPY . .
 
 # NEXT_PUBLIC_* vars are inlined into the client bundle at build time,
 # so they must be passed as build args, not just runtime env vars.
-ARG NEXT_PUBLIC_API_BASE=http://localhost:8080
+ARG NEXT_PUBLIC_API_BASE=http://localhost:8000
 ARG NEXT_PUBLIC_LK_URL=ws://localhost:7880
 # src/lib/supabase.ts throws at build time if these are unset, which
 # breaks static prerendering of /auth/callback. Placeholders keep the

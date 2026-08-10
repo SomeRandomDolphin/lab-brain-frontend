@@ -5,6 +5,10 @@ export interface User {
   email: string;
   avatarUrl?: string;
   createdAt: string;
+  // null/undefined = the account-level privacy-screen decision hasn't been
+  // made yet; the dashboard shows the first-login ToS modal until it's set.
+  tosAccepted?: boolean | null;
+  tosAcceptedAt?: string | null;
 }
 
 export interface AuthState {

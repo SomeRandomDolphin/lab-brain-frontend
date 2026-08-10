@@ -12,6 +12,9 @@ interface AuthStore {
   logout: () => void;
   setLoading: (v: boolean) => void;
   isAuthenticated: () => boolean;
+  /** Shallow-merge a patch into the current user (e.g. after POST /privacy/tos-consent).
+   *  No-op if there's no logged-in user. */
+  updateUser: (patch: Partial<User>) => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -24,6 +27,11 @@ export const useAuthStore = create<AuthStore>()(
       logout: () => set({ user: null, token: null, loading: false }),
       setLoading: (loading) => set({ loading }),
       isAuthenticated: () => !!get().token,
+      updateUser: (patch) => {
+        const current = get().user;
+        if (!current) return;
+        set({ user: { ...current, ...patch } });
+      },
     }),
     {
       name: "labbrain-auth",

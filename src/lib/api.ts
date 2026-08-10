@@ -1,6 +1,6 @@
 import { useAuthStore } from "@/store/auth";
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 /**
  * A 401 means the token is missing/expired/invalid — the backend has
@@ -127,6 +127,14 @@ export const api = {
 
   // ── Privacy ───────────────────────────────────────────────────────────────
   getPrivacyStatus: () => request<Record<string, unknown>>("/privacy/status"),
+
+  /** Account-level privacy-screen decision from the first-login ToS modal.
+   *  See app/api/v1/endpoints/privacy.py::set_tos_consent. */
+  setTosConsent: (accepted: boolean) =>
+    request<{ accepted: boolean; tosAcceptedAt: string | null }>("/privacy/tos-consent", {
+      method: "POST",
+      body: JSON.stringify({ accepted }),
+    }),
 };
 
 // ── SSE helper ───────────────────────────────────────────────────────────────
