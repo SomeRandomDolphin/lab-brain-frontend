@@ -81,7 +81,7 @@ export const PRIVACY_TERMS: PrivacyTermsSection[] = [
   {
     heading: "Questions or requests",
     body: [
-      "To ask a question, request a copy of your data, or request deletion, contact [ADD: contact person/email].",
+      "To ask a question, request a copy of your data, or request deletion, contact aryadaniswarapradipta@gmail.com.",
     ],
   },
   {
