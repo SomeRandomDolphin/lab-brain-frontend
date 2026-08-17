@@ -3,6 +3,21 @@ import { useEffect, useState } from "react";
 import { useSessionStore } from "@/store/session";
 import { cn } from "@/lib/utils";
 
+// Previously a flat 8000ms regardless of reply length. That's fine for a
+// short one-liner but for anything longer than ~2 sentences (or a
+// literature reply with citations rendered under it) the banner was
+// disappearing well before the agent's TTS voice actually finished
+// speaking it — reported as "the popup doesn't hold while the agent is
+// still talking". There's no real "TTS finished" event coming through
+// the store yet (AgentReplyEvent carries no duration/audio field), so
+// this scales the hold time to text length as a stand-in for actual
+// speaking time, clamped to a sane floor/ceiling. If an audio-end event
+// or a duration field ever gets added to AgentReplyEvent, switch to that
+// instead — it'll be exact where this is only an estimate.
+const READING_MS_PER_CHAR = 45; // ≈22 chars/sec, close to typical TTS pace
+const MIN_VISIBLE_MS = 8000;
+const MAX_VISIBLE_MS = 30000;
+
 export function AgentReplyBanner() {
   const agentReplies = useSessionStore((s) => s.agentReplies);
   const [visible, setVisible] = useState(false);
@@ -22,7 +37,11 @@ export function AgentReplyBanner() {
     setCurrentDocs(latest.documents_used ?? []);
     setVisible(true);
 
-    const timer = setTimeout(() => setVisible(false), 8000);
+    const holdMs = Math.min(
+      MAX_VISIBLE_MS,
+      Math.max(MIN_VISIBLE_MS, latest.text.length * READING_MS_PER_CHAR)
+    );
+    const timer = setTimeout(() => setVisible(false), holdMs);
     return () => clearTimeout(timer);
   }, [agentReplies]);
 

@@ -16,11 +16,39 @@ export function InviteToast() {
   // Only hosts see this; guests already know the session ID
   if (!sessionId || isGuest || dismissed) return null;
 
-  function copy() {
+  async function copy() {
     if (!sessionId) return;
-    navigator.clipboard.writeText(sessionId).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(sessionId);
+      } else {
+        // navigator.clipboard.writeText() only exists in a secure context
+        // (https:// or localhost). This app is reached remotely over
+        // Tailscale via a plain http://<tailscale-ip> URL, so
+        // navigator.clipboard is undefined there (or the call rejects) —
+        // the old code swallowed that in a bare .catch(() => {}) and then
+        // set copied=true unconditionally right after, so the button
+        // showed "✓ Copied!" even though nothing was actually copied.
+        // Fall back to the legacy selection + execCommand path, which
+        // still works without a secure context.
+        const ta = document.createElement("textarea");
+        ta.value = sessionId;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (!ok) throw new Error("execCommand('copy') failed");
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Leave copied=false — the session ID is still visible and
+      // select-all (`select-all` class below) so the user can copy it
+      // manually if both paths above are unavailable.
+    }
   }
 
   return (

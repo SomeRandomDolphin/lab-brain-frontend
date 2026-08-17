@@ -69,6 +69,17 @@ export default function DashboardPage() {
       }, 0)
     : 0;
 
+  // Newest-first. Previously this was `sessions.slice().reverse()`, which
+  // only produces newest-first if the API happens to return sessions in
+  // ascending insertion order — true today, but silent and order-of-return
+  // dependent (a re-sort on the backend, a paginated response, anything
+  // that changes API ordering breaks this with no visible error). Sorting
+  // explicitly by started_iso is correct regardless of what order the API
+  // sends records in.
+  const sortedSessions = [...sessions].sort(
+    (a, b) => new Date(b.started_iso).getTime() - new Date(a.started_iso).getTime()
+  );
+
   return (
     <div className="min-h-screen bg-ink-950 flex flex-col">
       {showTosModal && <PrivacyConsentModal onDecide={handleTosDecision} />}
@@ -156,7 +167,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {sessions.slice().reverse().map((s) => (
+              {sortedSessions.map((s) => (
                 <div
                   key={s.session_id}
                   className="glass rounded-xl px-5 py-3.5 flex items-center justify-between hover:bg-white/5 transition-colors cursor-default"
@@ -164,8 +175,11 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-neutral-600" />
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className="text-sm font-medium text-white flex items-center gap-2">
                         Session #{s.session_id}
+                        <span className="text-xs font-normal text-neutral-500">
+                          {formatSessionTime(s.started_iso)}
+                        </span>
                       </div>
                       <div className="text-xs text-neutral-600 mt-0.5">
                         {s.total_records} records · {s.transcripts}T · {s.vision_frames}V · {s.agent_replies}A
@@ -193,4 +207,18 @@ function greeting(): string {
   if (h < 12) return "morning";
   if (h < 17) return "afternoon";
   return "evening";
+}
+
+// Renders e.g. "Aug 17, 9:04 AM". Falls back to "" on a bad/missing
+// timestamp instead of showing "Invalid Date" in the UI.
+function formatSessionTime(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

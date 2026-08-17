@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/store/session";
 import { useShallow } from "zustand/react/shallow";
@@ -30,6 +31,38 @@ export function ControlBar({
       sessionId: s.sessionId,
     }))
   );
+
+  const [inviteCopied, setInviteCopied] = useState(false);
+
+  // Same fix as InviteToast's Copy button: navigator.clipboard.writeText()
+  // only exists in a secure context (https:// or localhost), and this app
+  // is reached remotely over Tailscale via a plain http://<tailscale-ip>
+  // URL — so the old bare writeText().catch(() => {}) failed silently
+  // there, with no fallback and no UI feedback either way, which is why
+  // clicking it looked like nothing happened.
+  async function copyInvite() {
+    if (!sessionId) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(sessionId);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = sessionId;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (!ok) throw new Error("execCommand('copy') failed");
+      }
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    } catch {
+      // sessionId is still visible via the InviteToast for manual copy
+    }
+  }
 
   return (
     <div className="flex items-center justify-center gap-3">
@@ -69,16 +102,21 @@ export function ControlBar({
         <ShareIcon />
       </ControlButton>
 
-      {/* Session ID copy */}
+      {/* Session ID copy — now styled the same as the other buttons
+          (was hardcoded grey, which is why it looked disabled), routed
+          through the shared ControlButton so it stays consistent with
+          them, and gives real success/failure feedback via the label. */}
       {sessionId && (
-        <button
-          onClick={() => navigator.clipboard.writeText(sessionId).catch(() => {})}
+        <ControlButton
+          active={true}
+          activeClass="glass border-white/10 hover:bg-white/10"
+          inactiveClass="glass border-white/10"
+          onClick={copyInvite}
           title="Copy session ID to invite others"
-          className="flex flex-col items-center gap-1 px-3 py-2 rounded-2xl glass border border-white/10 hover:bg-white/8 transition-all"
+          label={inviteCopied ? "Copied!" : "Invite"}
         >
           <InviteIcon />
-          <span className="text-[10px] text-neutral-500">Invite</span>
-        </button>
+        </ControlButton>
       )}
 
       {/* Spacer */}
@@ -197,8 +235,8 @@ function ShareIcon() {
 function InviteIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3M20 21c0-2.21-1.79-4-4-4h-4M8 11c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zM12 21v-2c0-2.21-1.79-4-4-4H4c-2.21 0-4 1.79-4 4v2" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M19 8v6M22 11h-6" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3M20 21c0-2.21-1.79-4-4-4h-4M8 11c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zM12 21v-2c0-2.21-1.79-4-4-4H4c-2.21 0-4 1.79-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M19 8v6M22 11h-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
