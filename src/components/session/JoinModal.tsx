@@ -1,37 +1,42 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { PreCheck } from "./PreCheck";
+import type { DeviceChoice } from "@/hooks/useDevicePreview";
 
 interface Props {
-  onJoin: (sessionId: string) => void;
-  onHost: () => void;
+  onJoin: (sessionId: string, devices: DeviceChoice) => void;
+  onHost: (devices: DeviceChoice) => void;
   loading: boolean;
   error: string | null;
   /** Session ID pulled from a `/session?join=<id>` meeting link. */
   initialSessionId?: string;
 }
 
+type Step = "choose" | "precheck";
+
 export function JoinModal({ onJoin, onHost, loading, error, initialSessionId }: Props) {
   const [tab, setTab] = useState<"host" | "join">(initialSessionId ? "join" : "host");
   const [sessionId, setSessionId] = useState(initialSessionId ?? "");
-  const autoJoinedRef = useRef(false);
+  // Arriving via a meeting link (`initialSessionId` set) skips straight to
+  // the device-check screen below with the ID already filled in — but it
+  // still requires the person to press "Join now" there. Previously this
+  // component auto-called onJoin() from a mount effect the instant a link
+  // was present, which (a) dropped people straight into the room with no
+  // chance to check mic/camera first, and (b) — combined with a since-fixed
+  // remount bug in the parent page — could re-trigger itself into a
+  // reconnect loop. There is now no code path that calls onJoin/onHost
+  // without an explicit click on the confirm button inside <PreCheck>.
+  const [step, setStep] = useState<Step>(initialSessionId ? "precheck" : "choose");
 
-  // Meeting-link flow: arriving via /session?join=<id> should behave like
-  // clicking a Zoom/Meet link — jump straight into the join attempt
-  // instead of making the person retype the ID and press "Join session"
-  // themselves. Guarded by a ref (not just a `loading` check) so this
-  // can't double-fire from React re-rendering this component while the
-  // first join attempt is still in flight.
-  useEffect(() => {
-    if (initialSessionId && !autoJoinedRef.current) {
-      autoJoinedRef.current = true;
-      onJoin(initialSessionId);
-    }
-  }, [initialSessionId, onJoin]);
-
-  function handleJoin(e: React.FormEvent) {
+  function handleChooseJoin(e: React.FormEvent) {
     e.preventDefault();
     if (!sessionId.trim()) return;
-    onJoin(sessionId.trim());
+    setStep("precheck");
+  }
+
+  function handleConfirm(devices: DeviceChoice) {
+    if (tab === "host") onHost(devices);
+    else onJoin(sessionId.trim(), devices);
   }
 
   return (
@@ -55,112 +60,106 @@ export function JoinModal({ onJoin, onHost, loading, error, initialSessionId }: 
           <p className="text-sm text-neutral-500 mt-1">Research session meeting</p>
         </div>
 
-        {/* Tabs */}
-        <div className="glass-strong rounded-3xl p-2 mb-4">
-          <div className="flex rounded-2xl overflow-hidden bg-ink-900/50 p-1">
-            <button
-              onClick={() => setTab("host")}
-              className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
-                tab === "host"
-                  ? "bg-signal text-white shadow-signal"
-                  : "text-neutral-500 hover:text-white"
-              }`}
-            >
-              Start new session
-            </button>
-            <button
-              onClick={() => setTab("join")}
-              className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
-                tab === "join"
-                  ? "bg-signal text-white shadow-signal"
-                  : "text-neutral-500 hover:text-white"
-              }`}
-            >
-              Join existing
-            </button>
+        {/* Tabs — only shown on the chooser step; the precheck step already
+            knows which mode it's in. */}
+        {step === "choose" && (
+          <div className="glass-strong rounded-3xl p-2 mb-4">
+            <div className="flex rounded-2xl overflow-hidden bg-ink-900/50 p-1">
+              <button
+                onClick={() => setTab("host")}
+                className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
+                  tab === "host"
+                    ? "bg-signal text-white shadow-signal"
+                    : "text-neutral-500 hover:text-white"
+                }`}
+              >
+                Start new session
+              </button>
+              <button
+                onClick={() => setTab("join")}
+                className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
+                  tab === "join"
+                    ? "bg-signal text-white shadow-signal"
+                    : "text-neutral-500 hover:text-white"
+                }`}
+              >
+                Join existing
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="glass-strong rounded-3xl p-7 shadow-panel">
-          {error && (
+          {step === "choose" && error && (
             <div className="mb-4 px-4 py-3 rounded-xl bg-danger/10 border border-danger/20 text-sm text-danger animate-fade-in">
               {error}
             </div>
           )}
 
-          {tab === "host" ? (
-            <div className="space-y-4">
-              <div className="text-center py-4">
-                <div className="text-4xl mb-3">🧪</div>
-                <h2 className="text-base font-semibold text-white mb-1">Host a new session</h2>
-                <p className="text-xs text-neutral-500 leading-relaxed">
-                  Creates a new LiveKit room. You&apos;ll get a session ID you can share with
-                  collaborators so they can join.
-                </p>
+          {step === "choose" ? (
+            tab === "host" ? (
+              <div className="space-y-4">
+                <div className="text-center py-4">
+                  <div className="text-4xl mb-3">🧪</div>
+                  <h2 className="text-base font-semibold text-white mb-1">Host a new session</h2>
+                  <p className="text-xs text-neutral-500 leading-relaxed">
+                    Creates a new LiveKit room. You&apos;ll get a session ID you can share with
+                    collaborators so they can join.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setStep("precheck")}
+                  className="w-full py-3 rounded-xl bg-signal hover:bg-signal-light text-white text-sm font-semibold transition-all shadow-signal"
+                >
+                  Continue
+                </button>
               </div>
-              <button
-                onClick={onHost}
-                disabled={loading}
-                className="w-full py-3 rounded-xl bg-signal hover:bg-signal-light disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all shadow-signal"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border border-white/40 border-t-white rounded-full animate-spin" />
-                    Setting up room…
-                  </span>
-                ) : (
-                  "Start session"
-                )}
-              </button>
-            </div>
+            ) : (
+              <form onSubmit={handleChooseJoin} className="space-y-4">
+                <div className="text-center py-2">
+                  <h2 className="text-base font-semibold text-white mb-1">Join a session</h2>
+                  <p className="text-xs text-neutral-500">
+                    Enter the session ID shared by the host. You&apos;ll join as{" "}
+                    {/* Display identity now comes from the logged-in account,
+                        not a typed name — see api.ts::getToken. */}
+                    your account.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-neutral-400 mb-1.5" htmlFor="sid">
+                    Session ID
+                  </label>
+                  <input
+                    id="sid"
+                    type="text"
+                    required
+                    value={sessionId}
+                    onChange={(e) => setSessionId(e.target.value)}
+                    placeholder="e.g. a3f9b2c1"
+                    className="w-full px-4 py-2.5 rounded-xl bg-ink-900 border border-rim text-sm font-mono placeholder:text-neutral-600 focus:border-signal/50 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!sessionId.trim()}
+                  className="w-full py-3 rounded-xl bg-signal hover:bg-signal-light disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all shadow-signal"
+                >
+                  Continue
+                </button>
+              </form>
+            )
           ) : (
-            <form onSubmit={handleJoin} className="space-y-4">
-              <div className="text-center py-2">
-                <h2 className="text-base font-semibold text-white mb-1">Join a session</h2>
-                <p className="text-xs text-neutral-500">
-                  {initialSessionId ? (
-                    "Joining from your invite link…"
-                  ) : (
-                    <>
-                      Enter the session ID shared by the host. You&apos;ll join as{" "}
-                      {/* Display identity now comes from the logged-in account,
-                          not a typed name — see api.ts::getToken. */}
-                      your account.
-                    </>
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-neutral-400 mb-1.5" htmlFor="sid">
-                  Session ID
-                </label>
-                <input
-                  id="sid"
-                  type="text"
-                  required
-                  value={sessionId}
-                  onChange={(e) => setSessionId(e.target.value)}
-                  placeholder="e.g. a3f9b2c1"
-                  className="w-full px-4 py-2.5 rounded-xl bg-ink-900 border border-rim text-sm font-mono placeholder:text-neutral-600 focus:border-signal/50 focus:outline-none transition-colors"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading || !sessionId.trim()}
-                className="w-full py-3 rounded-xl bg-signal hover:bg-signal-light disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all shadow-signal"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border border-white/40 border-t-white rounded-full animate-spin" />
-                    Joining…
-                  </span>
-                ) : (
-                  "Join session"
-                )}
-              </button>
-            </form>
+            <PreCheck
+              mode={tab}
+              sessionLabel={tab === "join" ? `Session ${sessionId}` : "New session"}
+              loading={loading}
+              error={error}
+              confirmLabel={tab === "host" ? "Start session" : "Join now"}
+              onBack={initialSessionId ? undefined : () => setStep("choose")}
+              onConfirm={handleConfirm}
+            />
           )}
         </div>
       </div>

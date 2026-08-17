@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useSessionStore } from "@/store/session";
 import type { AnyParticipant } from "@/store/session";
+import type { DeviceChoice } from "@/hooks/useDevicePreview";
 
 /** Sync all room participants (local + remote) into the store. */
 function syncParticipants(room: Room) {
@@ -45,9 +46,14 @@ export function useSession() {
 
   const store = useSessionStore();
 
-  /** Connect to a LiveKit room and publish mic + camera. */
+  /**
+   * Connect to a LiveKit room and publish mic + camera per the person's
+   * choices from the pre-join <PreCheck> screen. `devices` is optional
+   * only so this can still be called with no args elsewhere; start()/join()
+   * below always pass it now.
+   */
   const _connect = useCallback(
-    async (session_id: string, token: string, lk_url: string) => {
+    async (session_id: string, token: string, lk_url: string, devices?: DeviceChoice) => {
       // A previous room may still be connected (e.g. this is a retry, or
       // an auto-join fired twice). Tear it down first — otherwise its
       // event listeners stay attached, and when the server force-kicks it
@@ -63,68 +69,79 @@ export function useSession() {
       attachRoomEvents(room);
 
       await room.connect(lk_url, token);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      // ── DEBUG: verify the mic track is actually live and unmuted ──────────────
-      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-      const mst = micPub?.track?.mediaStreamTrack;
-      console.log("[debug:mic]", {
-        hasPublication: !!micPub,
-        isMuted_livekit: micPub?.isMuted,
-        trackExists: !!mst,
-        readyState: mst?.readyState,       // expect "live"
-        muted_browser: mst?.muted,         // expect false
-        enabled: mst?.enabled,             // expect true
-        label: mst?.label,                 // device name — confirms which mic
-        settings: mst?.getSettings(),      // sampleRate, channelCount, deviceId, etc.
-      });
 
-      // ── DEBUG: list all audio input devices the browser can see ───────────────
-      navigator.mediaDevices.enumerateDevices().then((devices) => {
-        console.log(
-          "[debug:mic] available audio inputs:",
-          devices.filter((d) => d.kind === "audioinput").map((d) => ({
-            label: d.label,
-            deviceId: d.deviceId,
-          }))
-        );
-      });
+      const wantMic = devices?.micEnabled ?? true;
+      const wantCam = devices?.camEnabled ?? true;
 
-      await room.localParticipant.setCameraEnabled(true);
+      // Neither of these is allowed to throw and take the whole join down
+      // with it — a camera (or mic) that fails to start after the person
+      // already confirmed in <PreCheck> (device unplugged, permission
+      // revoked, grabbed by another app in the interim) should degrade to
+      // whatever tracks *did* start, not abort the session entirely. This
+      // is what previously turned "Could not start video source" into a
+      // full join failure instead of an audio-only session.
+      if (wantMic) {
+        try {
+          await room.localParticipant.setMicrophoneEnabled(
+            true,
+            devices?.micDeviceId ? { deviceId: devices.micDeviceId } : undefined
+          );
+        } catch (e) {
+          console.warn("[useSession] microphone failed to start:", e);
+        }
+      }
+
+      if (wantCam) {
+        try {
+          await room.localParticipant.setCameraEnabled(
+            true,
+            devices?.camDeviceId ? { deviceId: devices.camDeviceId } : undefined
+          );
+        } catch (e) {
+          console.warn("[useSession] camera failed to start, continuing without video:", e);
+        }
+      }
 
       store.setRoom(room);
       store.setLive(true);
-      store.setMicEnabled(true);
-      store.setCamEnabled(true);
+      // Reflect what actually ended up publishing, not just what was
+      // requested — e.g. a camera that failed mid-connect should leave
+      // camEnabled false so the UI (mute icon, ControlBar) matches reality.
+      store.setMicEnabled(room.localParticipant.isMicrophoneEnabled);
+      store.setCamEnabled(room.localParticipant.isCameraEnabled);
       syncParticipants(room);
     },
     [store]
   );
 
-  /** Create a new room (host). */
-  const start = useCallback(async () => {
-    setError(null);
-    setStarting(true);
-    // Clear any summary from a previous session so it doesn't bleed through
-    // when the new session page mounts.
-    store.setSummary(null, false);
-    try {
-      // Use the logged-in account's actual name as the LiveKit identity/
-      // display name, instead of the backend's generic "browser-user"
-      // fallback — this is what shows up in the room roster and (via the
-      // vision known-identity fix) replaces "Person (anon)" in the
-      // transcript for the host.
-      const displayName = useAuthStore.getState().user?.name;
-      const { session_id, token, lk_url } = await api.createRoom(displayName);
-      store.setSession(session_id, token, lk_url);
-      store.setGuest(false);
-      await _connect(session_id, token, lk_url);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-      store.clearSession();
-    } finally {
-      setStarting(false);
-    }
-  }, [store, _connect]);
+  /** Create a new room (host). `devices` comes from the pre-join <PreCheck> screen. */
+  const start = useCallback(
+    async (devices?: DeviceChoice) => {
+      setError(null);
+      setStarting(true);
+      // Clear any summary from a previous session so it doesn't bleed through
+      // when the new session page mounts.
+      store.setSummary(null, false);
+      try {
+        // Use the logged-in account's actual name as the LiveKit identity/
+        // display name, instead of the backend's generic "browser-user"
+        // fallback — this is what shows up in the room roster and (via the
+        // vision known-identity fix) replaces "Person (anon)" in the
+        // transcript for the host.
+        const displayName = useAuthStore.getState().user?.name;
+        const { session_id, token, lk_url } = await api.createRoom(displayName);
+        store.setSession(session_id, token, lk_url);
+        store.setGuest(false);
+        await _connect(session_id, token, lk_url, devices);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+        store.clearSession();
+      } finally {
+        setStarting(false);
+      }
+    },
+    [store, _connect]
+  );
 
   /**
    * Join an existing room by session ID.
@@ -134,7 +151,7 @@ export function useSession() {
    * trusts a client-supplied identity; see app/api/v1/endpoints/livekit.py).
    */
   const join = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, devices?: DeviceChoice) => {
       setError(null);
       setStarting(true);
       // Clear any summary from a previous session.
@@ -143,7 +160,7 @@ export function useSession() {
         const { session_id, token, lk_url } = await api.getToken(sessionId);
         store.setSession(session_id, token, lk_url);
         store.setGuest(true);
-        await _connect(session_id, token, lk_url);
+        await _connect(session_id, token, lk_url, devices);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : String(e));
         store.clearSession();
