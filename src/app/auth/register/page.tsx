@@ -1,12 +1,37 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { authService } from "@/lib/auth";
 import { useAuthStore } from "@/store/auth";
 
+// Same Suspense-boundary requirement as login/page.tsx and
+// app/session/page.tsx — useSearchParams() needs one or `next build` fails.
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <RegisterPageInner />
+    </Suspense>
+  );
+}
+
+/**
+ * Only ever redirect to a path *within this app* — see the matching check
+ * in login/page.tsx for why (open-redirect via a crafted `redirect` param).
+ */
+function safeRedirect(raw: string | null): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return "/dashboard";
+}
+
+function RegisterPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Carried over from login/page.tsx's "Create one" link when someone
+  // without an account clicks a shared meeting link — see
+  // app/session/page.tsx's login gate for where this originates.
+  const redirectTo = safeRedirect(searchParams.get("redirect"));
+
   const { login, user, loading } = useAuthStore();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -16,8 +41,8 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
-  }, [user, loading, router]);
+    if (!loading && user) router.replace(redirectTo);
+  }, [user, loading, router, redirectTo]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,7 +54,7 @@ export default function RegisterPage() {
     try {
       const { user: u, token } = await authService.register(name, email, password);
       login(u, token);
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -151,7 +176,10 @@ export default function RegisterPage() {
 
           <p className="text-center text-xs text-neutral-500 mt-5">
             Already have an account?{" "}
-            <Link href="/auth/login" className="text-signal-light hover:underline">
+            <Link
+              href={redirectTo !== "/dashboard" ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}` : "/auth/login"}
+              className="text-signal-light hover:underline"
+            >
               Sign in
             </Link>
           </p>

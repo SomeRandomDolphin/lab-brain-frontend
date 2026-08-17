@@ -94,10 +94,20 @@ function SessionPageInner() {
   // Connect SSE when we have a session
   useSSE(sessionId);
 
-  // Gate: must be logged in
+  // Gate: must be logged in. Carry the current URL (including ?join=<id>
+  // if present) through to the login page as a `redirect` param, so an
+  // unauthenticated person who clicked a shared meeting link lands back on
+  // this exact /session?join=<id> URL after logging in — and from there
+  // JoinModal's initialSessionId logic takes it straight to PreCheck, same
+  // as if they'd been logged in when they clicked the link in the first
+  // place. Without this, the join id is lost at the login redirect and
+  // they'd land on the plain host/join chooser instead.
   useEffect(() => {
-    if (!user) router.replace("/auth/login");
-  }, [user, router]);
+    if (!user) {
+      const dest = joinParam ? `/session?join=${encodeURIComponent(joinParam)}` : "/session";
+      router.replace(`/auth/login?redirect=${encodeURIComponent(dest)}`);
+    }
+  }, [user, router, joinParam]);
 
   // Hide modal once we're connected
   useEffect(() => {

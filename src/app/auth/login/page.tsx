@@ -1,22 +1,57 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { authService } from "@/lib/auth";
 import { useAuthStore } from "@/store/auth";
 
+// useSearchParams() (used for ?redirect=<path>) requires a Suspense
+// boundary around whatever calls it, or `next build` fails prerendering
+// this page — same pattern as app/session/page.tsx. The actual page logic
+// moved into LoginPageInner; this default export just supplies that
+// boundary.
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+/**
+ * Only ever redirect to a path *within this app*. `redirect` comes from a
+ * URL query param, i.e. it's attacker-controllable — without this check
+ * someone could craft a link like /auth/login?redirect=https://evil.example
+ * and use a trusted login flow to bounce a signed-in user off to a phishing
+ * site (open redirect). Requiring a single leading "/" (and rejecting "//"
+ * which browsers treat as protocol-relative, i.e. also external) keeps the
+ * destination local no matter what's in the param.
+ */
+function safeRedirect(raw: string | null): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return "/dashboard";
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // e.g. /session?join=<id> when someone clicked a shared meeting link
+  // while signed out — see the login gate in app/session/page.tsx, which
+  // sets this param before sending them here. Falls back to /dashboard for
+  // anyone who navigated to /auth/login directly.
+  const redirectTo = safeRedirect(searchParams.get("redirect"));
+
   const { login, user, loading } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Already authenticated → go straight to dashboard
+  // Already authenticated → go straight to the intended destination
+  // (dashboard, or back to the meeting link's PreCheck screen).
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
-  }, [user, loading, router]);
+    if (!loading && user) router.replace(redirectTo);
+  }, [user, loading, router, redirectTo]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +60,7 @@ export default function LoginPage() {
     try {
       const { user: u, token } = await authService.login(email, password);
       login(u, token);
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {
@@ -126,7 +161,10 @@ export default function LoginPage() {
 
           <p className="text-center text-xs text-neutral-500 mt-5">
             No account?{" "}
-            <Link href="/auth/register" className="text-signal-light hover:underline">
+            <Link
+              href={redirectTo !== "/dashboard" ? `/auth/register?redirect=${encodeURIComponent(redirectTo)}` : "/auth/register"}
+              className="text-signal-light hover:underline"
+            >
               Create one
             </Link>
           </p>
