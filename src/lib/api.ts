@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/store/auth";
+import type { KgQueryResponse } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -124,6 +125,16 @@ export const api = {
     request<{ camera_fps: number; camera_quality: number; tts_auto_hide_ms: number; lk_url: string }>(
       "/config/client"
     ),
+
+  // ── kg-agent literature Q&A ─────────────────────────────────────────────
+  // Direct query against the shared literature knowledge graph — separate
+  // from live in-session QA (that's the SSE agent_reply hybrid path; this
+  // is for an explicit "ask the literature" action, e.g. a search box).
+  kgQuery: (query: string) =>
+    request<KgQueryResponse>("/lkc/kg-query", {
+      method: "POST",
+      body: JSON.stringify({ query }),
+    }),
 
   // ── Privacy ───────────────────────────────────────────────────────────────
   getPrivacyStatus: () => request<Record<string, unknown>>("/privacy/status"),

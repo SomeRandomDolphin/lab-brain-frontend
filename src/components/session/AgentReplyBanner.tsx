@@ -8,12 +8,18 @@ export function AgentReplyBanner() {
   const [visible, setVisible] = useState(false);
   const [currentText, setCurrentText] = useState("");
   const [currentMode, setCurrentMode] = useState("");
+  const [currentSource, setCurrentSource] = useState<string | undefined>(undefined);
+  const [currentFaithfulness, setCurrentFaithfulness] = useState<number | undefined>(undefined);
+  const [currentDocs, setCurrentDocs] = useState<{ name: string; chunks: number }[]>([]);
 
   useEffect(() => {
     if (agentReplies.length === 0) return;
     const latest = agentReplies[agentReplies.length - 1];
     setCurrentText(latest.text);
     setCurrentMode(latest.mode);
+    setCurrentSource(latest.source);
+    setCurrentFaithfulness(latest.faithfulness);
+    setCurrentDocs(latest.documents_used ?? []);
     setVisible(true);
 
     const timer = setTimeout(() => setVisible(false), 8000);
@@ -21,6 +27,10 @@ export function AgentReplyBanner() {
   }, [agentReplies]);
 
   if (!visible || !currentText) return null;
+
+  // documents_used only ever comes from the kg-agent path — transcript-
+  // grounded replies (the existing default) have no equivalent source list.
+  const isLiterature = currentSource === "kg_agent";
 
   return (
     <div
@@ -42,8 +52,32 @@ export function AgentReplyBanner() {
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold text-signal-light">Lab Brain</span>
             <span className="text-[10px] text-neutral-600 uppercase tracking-wider">{currentMode}</span>
+            {isLiterature && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-signal/20 text-signal-light uppercase tracking-wider">
+                Literature
+              </span>
+            )}
           </div>
           <p className="text-sm text-neutral-200 leading-relaxed">{currentText}</p>
+
+          {isLiterature && currentDocs.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {currentDocs.map((doc) => (
+                <span
+                  key={doc.name}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400"
+                  title={`${doc.chunks} chunk${doc.chunks === 1 ? "" : "s"} used`}
+                >
+                  {doc.name}
+                </span>
+              ))}
+              {typeof currentFaithfulness === "number" && (
+                <span className="text-[10px] text-neutral-600">
+                  {Math.round(currentFaithfulness * 100)}% confidence
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <button

@@ -53,11 +53,24 @@ export interface TranscriptEvent extends SSEBase {
   summoned: boolean;
 }
 
+export interface KgDocumentUsed {
+  name: string;
+  chunks: number;
+}
+
 export interface AgentReplyEvent extends SSEBase {
   type: "agent_reply";
   text: string;
   mode: ConvMode;
   grounded?: boolean;
+  // Present only on replies answered by the kg-agent literature service
+  // (see app/services/kg_agent_client.py) — absent/undefined for the
+  // existing session-transcript-grounded path, so all of these stay
+  // optional rather than widening the whole event shape.
+  source?: "transcript" | "kg_agent";
+  faithfulness?: number;
+  documents_used?: KgDocumentUsed[];
+  disclaimer?: string;
 }
 
 export interface SpeakEvent extends SSEBase {
@@ -146,4 +159,16 @@ export interface Tag {
   decisions: string[];
   deadlines: string[];
   entities: string[];
+}
+
+// ── kg-agent literature Q&A (POST /lkc/kg-query) ───────────────────────────
+export interface KgQueryResponse {
+  answer: string;
+  grounded: boolean;
+  faithfulness: number;
+  overall_confidence: number;
+  temporal_validity_status: string;
+  documents_used: KgDocumentUsed[];
+  disclaimer?: string | null;
+  strategy?: string | null;
 }
