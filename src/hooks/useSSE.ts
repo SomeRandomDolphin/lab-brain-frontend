@@ -16,7 +16,7 @@ export function useSSE(sessionId: string | null) {
   // triggers a re-render at all once mounted.
   const {
     setMode, setSummoned, setListening, addTranscript,
-    addAgentReply, setPerception, setLive,
+    addAgentReply, setPerception, setLive, setAgentSpeaking,
   } = useSessionStore(
     useShallow((s) => ({
       setMode: s.setMode,
@@ -26,6 +26,7 @@ export function useSSE(sessionId: string | null) {
       addAgentReply: s.addAgentReply,
       setPerception: s.setPerception,
       setLive: s.setLive,
+      setAgentSpeaking: s.setAgentSpeaking,
     }))
   );
 
@@ -63,6 +64,16 @@ export function useSSE(sessionId: string | null) {
             window.speechSynthesis.cancel(); // clear any stuck/pending utterance first
             const utt = new SpeechSynthesisUtterance(msg.text);
             utt.rate = 1.05;
+            // AgentReplyBanner used to guess how long to stay open from
+            // the reply's text length, which drifted from how long the
+            // voice actually took (especially on longer replies) — the
+            // banner could disappear mid-sentence. These are the real
+            // start/end signals for this exact utterance, so the banner
+            // can just stay open for as long as agentSpeaking is true
+            // instead of estimating.
+            utt.onstart = () => setAgentSpeaking(true);
+            utt.onend = () => setAgentSpeaking(false);
+            utt.onerror = () => setAgentSpeaking(false);
             window.speechSynthesis.speak(utt);
           }
           break;

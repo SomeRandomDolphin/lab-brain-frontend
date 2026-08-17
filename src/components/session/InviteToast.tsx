@@ -18,9 +18,15 @@ export function InviteToast() {
 
   async function copy() {
     if (!sessionId) return;
+    // Copy a clickable join link, not just the bare ID — the /session
+    // page now reads ?join=<id> and auto-attempts to join (see
+    // JoinModal's initialSessionId prop), so pasting this straight into
+    // a chat/email takes the recipient right into the join flow instead
+    // of making them retype the ID by hand.
+    const inviteLink = `${window.location.origin}/session?join=${sessionId}`;
     try {
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(sessionId);
+        await navigator.clipboard.writeText(inviteLink);
       } else {
         // navigator.clipboard.writeText() only exists in a secure context
         // (https:// or localhost). This app is reached remotely over
@@ -32,7 +38,7 @@ export function InviteToast() {
         // Fall back to the legacy selection + execCommand path, which
         // still works without a secure context.
         const ta = document.createElement("textarea");
-        ta.value = sessionId;
+        ta.value = inviteLink;
         ta.style.position = "fixed";
         ta.style.opacity = "0";
         document.body.appendChild(ta);
@@ -62,9 +68,10 @@ export function InviteToast() {
         </code>
         <button
           onClick={copy}
+          title="Copy a join link for this session"
           className="text-xs text-signal-light hover:text-white transition-colors whitespace-nowrap"
         >
-          {copied ? "✓ Copied!" : "Copy"}
+          {copied ? "✓ Link copied!" : "Copy link"}
         </button>
         <button
           onClick={() => setDismissed(true)}

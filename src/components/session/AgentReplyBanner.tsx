@@ -1,32 +1,38 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSessionStore } from "@/store/session";
+import { useShallow } from "zustand/react/shallow";
 import { cn } from "@/lib/utils";
 
-// Previously a flat 8000ms regardless of reply length. That's fine for a
-// short one-liner but for anything longer than ~2 sentences (or a
-// literature reply with citations rendered under it) the banner was
-// disappearing well before the agent's TTS voice actually finished
-// speaking it — reported as "the popup doesn't hold while the agent is
-// still talking". There's no real "TTS finished" event coming through
-// the store yet (AgentReplyEvent carries no duration/audio field), so
-// this scales the hold time to text length as a stand-in for actual
-// speaking time, clamped to a sane floor/ceiling. If an audio-end event
-// or a duration field ever gets added to AgentReplyEvent, switch to that
-// instead — it'll be exact where this is only an estimate.
+// Fallback-only constants now: used exclusively when a reply arrives with
+// no matching "speak" SSE event ever setting agentSpeaking=true for it —
+// e.g. SpeechSynthesis unsupported in the browser, or this reply type
+// doesn't get spoken. When agentSpeaking DOES fire, the banner tracks that
+// directly instead (see the effect below) and these are unused for it.
 const READING_MS_PER_CHAR = 45; // ≈22 chars/sec, close to typical TTS pace
 const MIN_VISIBLE_MS = 8000;
 const MAX_VISIBLE_MS = 30000;
+// Small grace period after real TTS playback ends, so the banner doesn't
+// vanish the instant the last word is spoken.
+const POST_SPEECH_HOLD_MS = 1200;
 
 export function AgentReplyBanner() {
-  const agentReplies = useSessionStore((s) => s.agentReplies);
+  const { agentReplies, agentSpeaking } = useSessionStore(
+    useShallow((s) => ({ agentReplies: s.agentReplies, agentSpeaking: s.agentSpeaking }))
+  );
   const [visible, setVisible] = useState(false);
   const [currentText, setCurrentText] = useState("");
   const [currentMode, setCurrentMode] = useState("");
   const [currentSource, setCurrentSource] = useState<string | undefined>(undefined);
   const [currentFaithfulness, setCurrentFaithfulness] = useState<number | undefined>(undefined);
   const [currentDocs, setCurrentDocs] = useState<{ name: string; chunks: number }[]>([]);
+  // Tracks whether we've actually observed agentSpeaking=true for the
+  // CURRENT reply yet, so the hide-timer effect below can tell "TTS never
+  // started for this one" (→ use the length estimate) apart from "TTS
+  // just finished" (→ short grace period, not the full estimate again).
+  const hasSpokenRef = useRef(false);
 
+  // A new reply arrived — show it and reset the has-spoken tracking.
   useEffect(() => {
     if (agentReplies.length === 0) return;
     const latest = agentReplies[agentReplies.length - 1];
@@ -36,14 +42,33 @@ export function AgentReplyBanner() {
     setCurrentFaithfulness(latest.faithfulness);
     setCurrentDocs(latest.documents_used ?? []);
     setVisible(true);
-
-    const holdMs = Math.min(
-      MAX_VISIBLE_MS,
-      Math.max(MIN_VISIBLE_MS, latest.text.length * READING_MS_PER_CHAR)
-    );
-    const timer = setTimeout(() => setVisible(false), holdMs);
-    return () => clearTimeout(timer);
+    hasSpokenRef.current = false;
   }, [agentReplies]);
+
+  // Decide when to hide it. Re-runs whenever agentSpeaking flips, which is
+  // what lets this track real TTS playback instead of a fixed timer.
+  useEffect(() => {
+    if (agentReplies.length === 0 || !visible) return;
+
+    if (agentSpeaking) {
+      // Actively speaking — stay open, nothing to schedule. The moment
+      // this flips false again, the effect re-runs and falls through to
+      // the "just finished" branch below.
+      hasSpokenRef.current = true;
+      return;
+    }
+
+    const latest = agentReplies[agentReplies.length - 1];
+    const delay = hasSpokenRef.current
+      ? POST_SPEECH_HOLD_MS
+      : Math.min(
+          MAX_VISIBLE_MS,
+          Math.max(MIN_VISIBLE_MS, latest.text.length * READING_MS_PER_CHAR)
+        );
+
+    const timer = setTimeout(() => setVisible(false), delay);
+    return () => clearTimeout(timer);
+  }, [agentReplies, agentSpeaking, visible]);
 
   if (!visible || !currentText) return null;
 

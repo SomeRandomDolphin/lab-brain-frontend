@@ -187,7 +187,17 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <Link
-                    href={`/dashboard/sessions/${s.session_id}`}
+                    // GET /lkc/sessions/{id} (api.getSession) doesn't return
+                    // started_iso/ended_iso today — only session_id, count,
+                    // records. We already have started_iso reliably from
+                    // this list call, so pass it along via the URL rather
+                    // than have the detail page guess a timestamp out of
+                    // raw record fields. If the backend ever adds
+                    // started_iso to that endpoint directly, this query
+                    // param becomes redundant (harmless) and can be
+                    // dropped in favor of reading it straight off the
+                    // response.
+                    href={`/dashboard/sessions/${s.session_id}?started=${encodeURIComponent(s.started_iso)}`}
                     className="text-xs text-signal-light hover:underline"
                   >
                     View records

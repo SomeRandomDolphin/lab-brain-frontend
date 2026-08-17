@@ -42,12 +42,15 @@ export function ControlBar({
   // clicking it looked like nothing happened.
   async function copyInvite() {
     if (!sessionId) return;
+    // Same join-link change as InviteToast — /session?join=<id> now
+    // auto-attempts to join via JoinModal's initialSessionId prop.
+    const inviteLink = `${window.location.origin}/session?join=${sessionId}`;
     try {
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(sessionId);
+        await navigator.clipboard.writeText(inviteLink);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = sessionId;
+        ta.value = inviteLink;
         ta.style.position = "fixed";
         ta.style.opacity = "0";
         document.body.appendChild(ta);

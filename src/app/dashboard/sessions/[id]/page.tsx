@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
 import { api } from "@/lib/api";
@@ -16,6 +16,12 @@ type Tab = "records" | "raw";
 export default function SessionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Passed by the dashboard's "View records" link (see dashboard page.tsx)
+  // since GET /lkc/sessions/{id} itself doesn't return started_iso. If
+  // this page is opened without that param (e.g. a bookmarked/typed URL),
+  // startedAt just stays null and the timestamp line is omitted below.
+  const startedParam = searchParams.get("started");
   const { user, loading } = useAuthStore();
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
@@ -36,6 +42,8 @@ export default function SessionDetailPage() {
     { key: "records", label: "Records", count: session?.count },
     { key: "raw",     label: "Raw JSON" },
   ];
+
+  const startedAt = formatSessionTime(startedParam);
 
   return (
     <div className="min-h-screen bg-ink-950 flex flex-col">
@@ -70,11 +78,13 @@ export default function SessionDetailPage() {
         <div className="mb-8">
           <div className="text-xs text-neutral-500 mb-1 uppercase tracking-wider">Session</div>
           <h1 className="text-2xl font-bold text-white font-mono">#{id}</h1>
-          {session && (
-            <div className="text-xs text-neutral-500 mt-2">
-              {session.count} {session.count === 1 ? "record" : "records"}
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-xs text-neutral-500 mt-2">
+            {startedAt && <span>{startedAt}</span>}
+            {startedAt && session && <span className="text-neutral-700">·</span>}
+            {session && (
+              <span>{session.count} {session.count === 1 ? "record" : "records"}</span>
+            )}
+          </div>
         </div>
 
         {/* Loading */}
@@ -124,6 +134,22 @@ export default function SessionDetailPage() {
       </main>
     </div>
   );
+}
+
+// Renders e.g. "Aug 17, 2026, 9:04 AM". Returns null on a missing/bad
+// timestamp so the caller can omit the line entirely instead of showing
+// "Invalid Date".
+function formatSessionTime(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /* ── Records panel ────────────────────────────────────────── */

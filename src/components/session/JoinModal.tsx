@@ -1,16 +1,32 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Props {
   onJoin: (sessionId: string) => void;
   onHost: () => void;
   loading: boolean;
   error: string | null;
+  /** Session ID pulled from a `/session?join=<id>` meeting link. */
+  initialSessionId?: string;
 }
 
-export function JoinModal({ onJoin, onHost, loading, error }: Props) {
-  const [tab, setTab] = useState<"host" | "join">("host");
-  const [sessionId, setSessionId] = useState("");
+export function JoinModal({ onJoin, onHost, loading, error, initialSessionId }: Props) {
+  const [tab, setTab] = useState<"host" | "join">(initialSessionId ? "join" : "host");
+  const [sessionId, setSessionId] = useState(initialSessionId ?? "");
+  const autoJoinedRef = useRef(false);
+
+  // Meeting-link flow: arriving via /session?join=<id> should behave like
+  // clicking a Zoom/Meet link — jump straight into the join attempt
+  // instead of making the person retype the ID and press "Join session"
+  // themselves. Guarded by a ref (not just a `loading` check) so this
+  // can't double-fire from React re-rendering this component while the
+  // first join attempt is still in flight.
+  useEffect(() => {
+    if (initialSessionId && !autoJoinedRef.current) {
+      autoJoinedRef.current = true;
+      onJoin(initialSessionId);
+    }
+  }, [initialSessionId, onJoin]);
 
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
@@ -102,10 +118,16 @@ export function JoinModal({ onJoin, onHost, loading, error }: Props) {
               <div className="text-center py-2">
                 <h2 className="text-base font-semibold text-white mb-1">Join a session</h2>
                 <p className="text-xs text-neutral-500">
-                  Enter the session ID shared by the host. You&apos;ll join as{" "}
-                  {/* Display identity now comes from the logged-in account,
-                      not a typed name — see api.ts::getToken. */}
-                  your account.
+                  {initialSessionId ? (
+                    "Joining from your invite link…"
+                  ) : (
+                    <>
+                      Enter the session ID shared by the host. You&apos;ll join as{" "}
+                      {/* Display identity now comes from the logged-in account,
+                          not a typed name — see api.ts::getToken. */}
+                      your account.
+                    </>
+                  )}
                 </p>
               </div>
 

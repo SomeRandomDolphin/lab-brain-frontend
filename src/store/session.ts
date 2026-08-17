@@ -39,6 +39,11 @@ interface SessionStore {
   transcripts: TranscriptEntry[];
   agentReplies: AgentEntry[];
   lastAgentText: string | null;
+  // True exactly while the browser's SpeechSynthesis is actively speaking
+  // an agent reply — driven by the "speak" SSE handler's utterance.onstart/
+  // onend in useSSE.ts. Lets AgentReplyBanner hold itself open for as long
+  // as the agent is actually talking instead of guessing a duration.
+  agentSpeaking: boolean;
 
   // Perception
   presentSpeakers: string[];
@@ -64,6 +69,7 @@ interface SessionStore {
   setListening: (v: boolean) => void;
   addTranscript: (t: TranscriptEvent) => void;
   addAgentReply: (r: AgentReplyEvent) => void;
+  setAgentSpeaking: (v: boolean) => void;
   setPerception: (p: PerceptionEvent) => void;
   setSummary: (s: string | null, loading?: boolean) => void;
 }
@@ -84,6 +90,7 @@ export const useSessionStore = create<SessionStore>()((set) => ({
   transcripts: [],
   agentReplies: [],
   lastAgentText: null,
+  agentSpeaking: false,
   presentSpeakers: [],
   engagementCues: {},
   sceneSummary: "",
@@ -98,7 +105,7 @@ export const useSessionStore = create<SessionStore>()((set) => ({
       isLive: false, room: null, participants: [],
       micEnabled: true, camEnabled: true, isGuest: false,
       mode: "idle", summoned: false, isListening: false,
-      transcripts: [], agentReplies: [], lastAgentText: null,
+      transcripts: [], agentReplies: [], lastAgentText: null, agentSpeaking: false,
       presentSpeakers: [], engagementCues: {}, sceneSummary: "", environmentState: {},
       // summary/summaryLoading intentionally NOT reset here. useSession's
       // stop() calls clearSession() in a `finally` right after fetching the
@@ -129,6 +136,7 @@ export const useSessionStore = create<SessionStore>()((set) => ({
       ],
       lastAgentText: r.text,
     })),
+  setAgentSpeaking: (agentSpeaking) => set({ agentSpeaking }),
   setPerception: (p) =>
     set({
       presentSpeakers: p.present_speakers,
