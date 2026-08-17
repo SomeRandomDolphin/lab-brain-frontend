@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
@@ -13,7 +13,25 @@ interface SessionDetail {
 
 type Tab = "records" | "raw";
 
+// Same reason as /session/page.tsx: useSearchParams() (for ?started=)
+// needs a Suspense boundary or `next build` fails prerendering this page.
 export default function SessionDetailPage() {
+  return (
+    <Suspense fallback={<SessionDetailFallback />}>
+      <SessionDetailPageInner />
+    </Suspense>
+  );
+}
+
+function SessionDetailFallback() {
+  return (
+    <div className="min-h-screen bg-ink-950 flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full border-2 border-signal/30 border-t-signal animate-spin" />
+    </div>
+  );
+}
+
+function SessionDetailPageInner() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
