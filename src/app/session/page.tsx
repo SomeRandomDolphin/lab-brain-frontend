@@ -52,6 +52,15 @@ function SessionPageInner() {
   // "Copy link" buttons. Read once; JoinModal auto-attempts the join off
   // this on mount, so we don't need to re-read it on every render.
   const joinParam = searchParams.get("join") ?? undefined;
+  // Mirrors joinParam but gets cleared to undefined the moment we act on
+  // it. JoinModal's own auto-join guard (autoJoinedRef) only survives
+  // re-renders, not unmount/remount — and this page remounts JoinModal
+  // any time isLive drops (see the render branch below). Without this,
+  // any disconnect — spurious or real — would re-trigger the join-link
+  // auto-join against the same session_id/identity and reopen the
+  // reconnect storm from useSession.ts. State (not a ref) because we
+  // need the cleared value to actually flow into JoinModal's props.
+  const [autoJoinId, setAutoJoinId] = useState(joinParam);
   const { user } = useAuthStore();
   const { start, join, stop, toggleMic, toggleCam, shareScreen, starting, stopping, error } = useSession();
   // Previously: const { sessionId, isLive, isGuest, summary, summaryLoading } = useSessionStore();
@@ -101,6 +110,15 @@ function SessionPageInner() {
   // account, not a client-typed name. See useSession.ts::join and
   // components/session/JoinModal.tsx.
   function handleJoin(sid: string) {
+    // Clear the auto-join intent as soon as we act on it, and strip
+    // ?join=... from the URL so a later remount (spurious disconnect, or
+    // even a manual page refresh) doesn't read the same link and re-fire
+    // the auto-join effect in JoinModal against a session we already
+    // tried to join.
+    setAutoJoinId(undefined);
+    if (joinParam) {
+      router.replace("/session", { scroll: false });
+    }
     setHasEnded(false);
     join(sid);
   }
@@ -124,7 +142,7 @@ function SessionPageInner() {
         onJoin={handleJoin}
         loading={starting}
         error={error}
-        initialSessionId={joinParam}
+        initialSessionId={autoJoinId}
       />
     );
   }

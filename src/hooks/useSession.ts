@@ -48,6 +48,16 @@ export function useSession() {
   /** Connect to a LiveKit room and publish mic + camera. */
   const _connect = useCallback(
     async (session_id: string, token: string, lk_url: string) => {
+      // A previous room may still be connected (e.g. this is a retry, or
+      // an auto-join fired twice). Tear it down first — otherwise its
+      // event listeners stay attached, and when the server force-kicks it
+      // for being a duplicate identity, its stale `Disconnected` handler
+      // fires `setLive(false)` on top of the room we're about to create.
+      if (roomRef.current) {
+        roomRef.current.removeAllListeners();
+        await roomRef.current.disconnect().catch(() => null);
+        roomRef.current = null;
+      }
       const room = new Room();
       roomRef.current = room;
       attachRoomEvents(room);
