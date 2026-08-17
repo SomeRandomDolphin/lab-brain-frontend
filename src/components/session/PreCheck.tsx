@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/auth";
 import { useDevicePreview, type DeviceChoice } from "@/hooks/useDevicePreview";
 import { initials } from "@/lib/utils";
@@ -21,9 +21,30 @@ export function PreCheck({ mode, sessionLabel, loading, error, confirmLabel, onB
   const preview = useDevicePreview();
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Keeps srcObject in sync when the stream *object itself* changes (e.g.
+  // selecting a different camera in the device picker, or the
+  // camera+mic-together fallback swapping in a new audio-only stream).
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = preview.stream;
   }, [preview.stream]);
+
+  // The <video> element below is conditionally rendered — it unmounts
+  // entirely when the camera is toggled off (showVideo goes false) and a
+  // BRAND NEW <video> node is created when toggled back on. toggleCam()
+  // in useDevicePreview doesn't create a new MediaStream object (it just
+  // flips `track.enabled` on the existing one), so the effect above never
+  // re-fires for that new node — its dependency, `preview.stream`, hasn't
+  // changed as a value. Without this callback ref the new node's
+  // srcObject was simply never set, which is why the preview looked dead
+  // after turning the camera back on. A ref callback fires on every mount
+  // regardless of whether any prop changed, so it catches exactly that
+  // case that the effect misses.
+  const attachVideoRef = useCallback(
+    (node: HTMLVideoElement | null) => {
+      if (node) node.srcObject = preview.stream;
+    },
+    [preview.stream]
+  );
 
   function handleConfirm() {
     const devices: DeviceChoice = {
@@ -60,7 +81,7 @@ export function PreCheck({ mode, sessionLabel, loading, error, confirmLabel, onB
       <div className="relative aspect-video rounded-2xl overflow-hidden bg-ink-900 border border-rim">
         {showVideo ? (
           <video
-            ref={videoRef}
+            ref={attachVideoRef}
             autoPlay
             muted
             playsInline

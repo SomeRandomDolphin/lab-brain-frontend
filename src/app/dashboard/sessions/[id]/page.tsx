@@ -63,6 +63,12 @@ function SessionDetailPageInner() {
 
   const startedAt = formatSessionTime(startedParam);
 
+  // Parsed once for reuse by every record row, so each row doesn't have to
+  // re-parse/validate the same ISO string. Stays null if the param is
+  // missing or unparseable — record rows fall back to a relative mm:ss
+  // offset in that case (see resolveRecordTime below).
+  const sessionStartDate = parseValidDate(startedParam);
+
   return (
     <div className="min-h-screen bg-ink-950 flex flex-col">
       {/* Ambient */}
@@ -142,7 +148,7 @@ function SessionDetailPageInner() {
             </div>
 
             {activeTab === "records" && (
-              <RecordsPanel records={session.records} />
+              <RecordsPanel records={session.records} sessionStart={sessionStartDate} />
             )}
             {activeTab === "raw" && (
               <RawPanel session={session} />
@@ -154,13 +160,21 @@ function SessionDetailPageInner() {
   );
 }
 
+// Parses an ISO timestamp, returning null instead of an "Invalid Date" if
+// it's missing or malformed. Shared by the page header and every record
+// row so there's one place that decides what counts as a usable start time.
+function parseValidDate(iso: string | null): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 // Renders e.g. "Aug 17, 2026, 9:04 AM". Returns null on a missing/bad
 // timestamp so the caller can omit the line entirely instead of showing
 // "Invalid Date".
 function formatSessionTime(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
+  const d = parseValidDate(iso);
+  if (!d) return null;
   return d.toLocaleString([], {
     year: "numeric",
     month: "short",
@@ -172,7 +186,13 @@ function formatSessionTime(iso: string | null): string | null {
 
 /* ── Records panel ────────────────────────────────────────── */
 
-function RecordsPanel({ records }: { records: Record<string, unknown>[] }) {
+function RecordsPanel({
+  records,
+  sessionStart,
+}: {
+  records: Record<string, unknown>[];
+  sessionStart: Date | null;
+}) {
   if (!records?.length) {
     return (
       <div className="glass rounded-2xl p-10 text-center text-neutral-600 text-sm">
@@ -184,13 +204,66 @@ function RecordsPanel({ records }: { records: Record<string, unknown>[] }) {
   return (
     <div className="space-y-2">
       {records.map((record, i) => (
-        <RecordRow key={i} index={i} record={record} />
+        <RecordRow key={i} index={i} record={record} sessionStart={sessionStart} />
       ))}
     </div>
   );
 }
 
-function RecordRow({ index, record }: { index: number; record: Record<string, unknown> }) {
+/**
+ * A record's own `timestamp`/`start` field is ambiguous on its own: some
+ * backends emit a Unix epoch (seconds since 1970, always a large number),
+ * others emit a session-relative offset (seconds since the session
+ * started, always small). >1e9 reliably distinguishes the two — an offset
+ * that large would mean a 30+ year session.
+ *
+ * - Epoch → absolute clock time is derivable directly, no session start
+ *   needed. No meaningful "relative" offset to show alongside it.
+ * - Relative offset → mm:ss is always derivable. Absolute clock time is
+ *   only derivable if we know when the session started (sessionStart).
+ */
+function resolveRecordTime(
+  ts: number | null,
+  sessionStart: Date | null
+): { absolute: string | null; relative: string | null } {
+  if (ts === null) return { absolute: null, relative: null };
+
+  const isEpoch = ts > 1_000_000_000;
+
+  if (isEpoch) {
+    const d = new Date(ts * 1000);
+    return {
+      absolute: Number.isNaN(d.getTime())
+        ? null
+        : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      relative: null,
+    };
+  }
+
+  const m = Math.floor(ts / 60).toString().padStart(2, "0");
+  const s = Math.floor(ts % 60).toString().padStart(2, "0");
+  const relative = `${m}:${s}`;
+
+  if (!sessionStart) return { absolute: null, relative };
+
+  const d = new Date(sessionStart.getTime() + ts * 1000);
+  return {
+    absolute: Number.isNaN(d.getTime())
+      ? null
+      : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    relative,
+  };
+}
+
+function RecordRow({
+  index,
+  record,
+  sessionStart,
+}: {
+  index: number;
+  record: Record<string, unknown>;
+  sessionStart: Date | null;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   // Try to pick out well-known display fields
@@ -204,16 +277,7 @@ function RecordRow({ index, record }: { index: number; record: Record<string, un
                 : typeof record.start     === "number" ? record.start
                 : null;
 
-  function formatTs(t: number | null) {
-    if (t === null) return null;
-    // If timestamp looks like a Unix epoch (>1e9), format as time; otherwise as seconds offset
-    if (t > 1_000_000_000) {
-      return new Date(t * 1000).toLocaleTimeString();
-    }
-    const m = Math.floor(t / 60).toString().padStart(2, "0");
-    const s = Math.floor(t % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  }
+  const { absolute, relative } = resolveRecordTime(ts, sessionStart);
 
   return (
     <div className="glass rounded-xl overflow-hidden">
@@ -227,9 +291,14 @@ function RecordRow({ index, record }: { index: number; record: Record<string, un
           {index + 1}
         </span>
 
-        {/* Timestamp */}
-        <span className="text-xs text-neutral-600 font-mono w-16 shrink-0 pt-0.5">
-          {formatTs(ts) ?? "—"}
+        {/* Timestamp — absolute clock time when derivable (title-hover shows
+            the relative offset too); falls back to just the mm:ss offset if
+            we don't know the session's actual start time. */}
+        <span
+          className="text-xs text-neutral-600 font-mono w-16 shrink-0 pt-0.5"
+          title={absolute && relative ? `${relative} into session` : undefined}
+        >
+          {absolute ?? relative ?? "—"}
         </span>
 
         {/* Type badge */}
