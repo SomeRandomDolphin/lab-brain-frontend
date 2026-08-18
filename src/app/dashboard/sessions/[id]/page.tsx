@@ -211,48 +211,46 @@ function RecordsPanel({
 }
 
 /**
- * A record's own `timestamp`/`start` field is ambiguous on its own: some
- * backends emit a Unix epoch (seconds since 1970, always a large number),
- * others emit a session-relative offset (seconds since the session
- * started, always small). >1e9 reliably distinguishes the two — an offset
- * that large would mean a 30+ year session.
- *
- * - Epoch → absolute clock time is derivable directly, no session start
- *   needed. No meaningful "relative" offset to show alongside it.
- * - Relative offset → mm:ss is always derivable. Absolute clock time is
- *   only derivable if we know when the session started (sessionStart).
+ * Every record type (transcript, agent_reply, vision) carries its own
+ * absolute timestamp as `timestamp_iso` (preferred — exact) and/or
+ * `timestamp_unix` (epoch seconds, fallback). Unlike the session-relative
+ * offset this replaces, the record already knows its own wall-clock time,
+ * so `sessionStart` is only needed for the secondary "mm:ss into session"
+ * figure, not for the primary display value.
  */
 function resolveRecordTime(
-  ts: number | null,
+  record: Record<string, unknown>,
   sessionStart: Date | null
 ): { absolute: string | null; relative: string | null } {
-  if (ts === null) return { absolute: null, relative: null };
+  const iso = typeof record.timestamp_iso === "string" ? record.timestamp_iso : null;
+  const unix = typeof record.timestamp_unix === "number" ? record.timestamp_unix : null;
 
-  const isEpoch = ts > 1_000_000_000;
+  let recordDate: Date | null = null;
+  if (iso) {
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) recordDate = d;
+  }
+  if (!recordDate && unix !== null) {
+    const d = new Date(unix * 1000);
+    if (!Number.isNaN(d.getTime())) recordDate = d;
+  }
+  if (!recordDate) return { absolute: null, relative: null };
 
-  if (isEpoch) {
-    const d = new Date(ts * 1000);
-    return {
-      absolute: Number.isNaN(d.getTime())
-        ? null
-        : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-      relative: null,
-    };
+  const absolute = recordDate.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  let relative: string | null = null;
+  if (sessionStart) {
+    const deltaSec = Math.max(0, (recordDate.getTime() - sessionStart.getTime()) / 1000);
+    const m = Math.floor(deltaSec / 60).toString().padStart(2, "0");
+    const s = Math.floor(deltaSec % 60).toString().padStart(2, "0");
+    relative = `${m}:${s}`;
   }
 
-  const m = Math.floor(ts / 60).toString().padStart(2, "0");
-  const s = Math.floor(ts % 60).toString().padStart(2, "0");
-  const relative = `${m}:${s}`;
-
-  if (!sessionStart) return { absolute: null, relative };
-
-  const d = new Date(sessionStart.getTime() + ts * 1000);
-  return {
-    absolute: Number.isNaN(d.getTime())
-      ? null
-      : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-    relative,
-  };
+  return { absolute, relative };
 }
 
 function RecordRow({
@@ -272,12 +270,10 @@ function RecordRow({
   const text    = typeof record.text    === "string" ? record.text
                 : typeof record.content === "string" ? record.content
                 : typeof record.description === "string" ? record.description
-                : null;
-  const ts      = typeof record.timestamp === "number" ? record.timestamp
-                : typeof record.start     === "number" ? record.start
+                : typeof record.scene_summary === "string" ? record.scene_summary
                 : null;
 
-  const { absolute, relative } = resolveRecordTime(ts, sessionStart);
+  const { absolute, relative } = resolveRecordTime(record, sessionStart);
 
   return (
     <div className="glass rounded-xl overflow-hidden">
