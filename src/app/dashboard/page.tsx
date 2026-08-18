@@ -116,6 +116,12 @@ export default function DashboardPage() {
           >
             {user ? initials(user.name) : "?"}
           </div>
+          <Link
+            href="/dashboard/settings"
+            className="text-xs text-neutral-500 hover:text-white transition-colors"
+          >
+            Settings
+          </Link>
           <button
             onClick={handleLogout}
             className="text-xs text-neutral-500 hover:text-white transition-colors"
