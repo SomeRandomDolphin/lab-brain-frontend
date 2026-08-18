@@ -110,6 +110,24 @@ export const authService = {
   },
 
   /**
+   * PATCH /auth/me
+   * Header: Authorization: Bearer <token>
+   * Body: any subset of { name, email, avatarUrl } — only included fields
+   * are changed server-side (exclude_unset on the backend).
+   * Returns: { user: User }
+   * Throws with the backend's `detail` message on failure — notably a 409
+   * when the new email is already registered to another account.
+   */
+  async updateProfile(
+    patch: Partial<Pick<User, "name" | "email" | "avatarUrl">>,
+  ): Promise<{ user: User }> {
+    return request<{ user: User }>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  },
+
+  /**
    * POST /auth/forgot-password
    * Body: { email }
    * Triggers a password-reset email on the backend.

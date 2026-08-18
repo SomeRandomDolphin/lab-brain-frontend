@@ -3,8 +3,9 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   createdAt: string;
+  isAdmin: boolean;
   // null/undefined = the account-level privacy-screen decision hasn't been
   // made yet; the dashboard shows the first-login ToS modal until it's set.
   tosAccepted?: boolean | null;

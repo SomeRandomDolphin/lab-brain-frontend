@@ -15,6 +15,23 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showFullNotice, setShowFullNotice] = useState(false);
   const [syncing, setSyncing] = useState(true);
+  const [resetState, setResetState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [signingOut, setSigningOut] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  // Keep the edit inputs in sync with the current user whenever we're not
+  // actively editing — covers both first load and the authService.me()
+  // sync below potentially bringing in a newer name/email.
+  useEffect(() => {
+    if (!editingProfile && user) {
+      setNameInput(user.name);
+      setEmailInput(user.email);
+    }
+  }, [user, editingProfile]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/auth/login");
@@ -64,6 +81,72 @@ export default function SettingsPage() {
     } finally {
       setSaving(null);
     }
+  }
+
+  async function requestPasswordReset() {
+    if (!user) return;
+    setResetState("sending");
+    try {
+      await authService.forgotPassword(user.email); // POST /auth/forgot-password
+      setResetState("sent");
+    } catch {
+      setResetState("error");
+    }
+  }
+
+  function startEditingProfile() {
+    if (!user) return;
+    setNameInput(user.name);
+    setEmailInput(user.email);
+    setProfileError(null);
+    setEditingProfile(true);
+  }
+
+  function cancelEditingProfile() {
+    setProfileError(null);
+    setEditingProfile(false);
+  }
+
+  async function saveProfile() {
+    if (!user) return;
+    const name = nameInput.trim();
+    const email = emailInput.trim().toLowerCase();
+    if (!name) {
+      setProfileError("Name can't be empty.");
+      return;
+    }
+    // Only send what actually changed — PATCH /auth/me only touches fields
+    // present in the body, so there's no reason to re-send an unchanged
+    // email and trigger its email_confirm round trip for nothing.
+    const patch: { name?: string; email?: string } = {};
+    if (name !== user.name) patch.name = name;
+    if (email !== user.email) patch.email = email;
+    if (Object.keys(patch).length === 0) {
+      setEditingProfile(false);
+      return;
+    }
+
+    setProfileError(null);
+    setProfileSaving(true);
+    try {
+      const result = await authService.updateProfile(patch); // PATCH /auth/me
+      useAuthStore.getState().updateUser(result.user);
+      setEditingProfile(false);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "Couldn't save changes.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    // Two separate logouts by design — authService and useAuthStore each
+    // keep their own token copy (see api.ts / lib/auth.ts), same pattern
+    // as the dashboard's nav sign-out.
+    await authService.logout().catch(() => {});
+    useAuthStore.getState().logout();
+    router.push("/");
   }
 
   if (loading || !user) {
@@ -121,14 +204,115 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold text-neutral-400 mb-3 uppercase tracking-wider">
             Account
           </h2>
-          <div className="glass rounded-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-neutral-500">Name</span>
-              <span className="text-white">{user.name}</span>
+          <div className="glass rounded-2xl p-5">
+            <div className="flex items-center gap-4 mb-4">
+              {user.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  className="w-14 h-14 rounded-full object-cover border border-white/10"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-full bg-signal/20 border border-signal/30 flex items-center justify-center text-base font-semibold text-signal-light">
+                  {initials(user.name)}
+                </div>
+              )}
+
+              {editingProfile ? (
+                <div className="flex-1 space-y-2">
+                  <input
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    placeholder="Name"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-signal/50"
+                  />
+                  <input
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="Email"
+                    type="email"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-signal/50"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <div className="text-sm font-medium text-white flex items-center gap-2">
+                    {user.name}
+                    {user.isAdmin && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-signal/20 text-signal-light border border-signal/30">
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-neutral-500 mt-0.5">{user.email}</div>
+                </div>
+              )}
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-neutral-500">Email</span>
-              <span className="text-white">{user.email}</span>
+
+            {profileError && <div className="text-xs text-red-400 mb-3">{profileError}</div>}
+
+            {editingProfile ? (
+              <div className="flex gap-3">
+                <button
+                  disabled={profileSaving}
+                  onClick={cancelEditingProfile}
+                  className="flex-1 px-4 py-2 rounded-xl border border-white/10 text-xs text-neutral-300 hover:bg-white/5 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={profileSaving}
+                  onClick={saveProfile}
+                  className="flex-1 px-4 py-2 rounded-xl bg-signal hover:bg-signal-light text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  {profileSaving ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between border-t border-white/10 pt-3">
+                <span className="text-xs text-neutral-600">
+                  Member since {formatDate(user.createdAt) || "—"}
+                </span>
+                <button
+                  onClick={startEditingProfile}
+                  className="text-xs text-signal-light hover:underline"
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Security */}
+        <section className="mb-8">
+          <h2 className="text-sm font-semibold text-neutral-400 mb-3 uppercase tracking-wider">
+            Security
+          </h2>
+          <div className="glass rounded-2xl p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm text-white">Password</div>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {resetState === "sent"
+                    ? `Check ${user.email} for a reset link.`
+                    : resetState === "error"
+                    ? "Couldn't send the reset email — try again."
+                    : "Send a reset link to your email."}
+                </p>
+              </div>
+              <button
+                disabled={resetState === "sending" || resetState === "sent"}
+                onClick={requestPasswordReset}
+                className="shrink-0 px-4 py-2 rounded-xl border border-white/10 text-xs text-neutral-300 hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                {resetState === "sending"
+                  ? "Sending…"
+                  : resetState === "sent"
+                  ? "Sent"
+                  : "Reset password"}
+              </button>
             </div>
           </div>
         </section>
@@ -203,6 +387,10 @@ export default function SettingsPage() {
           >
             {showFullNotice ? "Hide full notice" : "View full privacy notice"}
           </button>
+          <p className="text-[11px] text-neutral-600 mt-2">
+            To request a copy of your data or ask for it to be deleted, see
+            "Questions or requests" in the full notice above.
+          </p>
 
           {showFullNotice && (
             <div className="glass rounded-2xl p-5 mt-3 space-y-4">
@@ -221,6 +409,17 @@ export default function SettingsPage() {
               <p className="text-[10px] text-neutral-600 pt-1">Notice version {PRIVACY_TERMS_VERSION}</p>
             </div>
           )}
+        </section>
+
+        {/* Sign out */}
+        <section className="mt-8 pt-6 border-t border-white/5">
+          <button
+            disabled={signingOut}
+            onClick={handleSignOut}
+            className="text-xs text-neutral-500 hover:text-white transition-colors disabled:opacity-50"
+          >
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
         </section>
       </main>
     </div>
