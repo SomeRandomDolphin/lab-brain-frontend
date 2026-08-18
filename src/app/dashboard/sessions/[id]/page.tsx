@@ -271,6 +271,7 @@ function RecordRow({
                 : typeof record.content === "string" ? record.content
                 : typeof record.description === "string" ? record.description
                 : typeof record.scene_summary === "string" ? record.scene_summary
+                : typeof record.summary === "string" ? record.summary
                 : null;
 
   const { absolute, relative } = resolveRecordTime(record, sessionStart);
