@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
@@ -44,8 +44,10 @@ export default function SettingsPage() {
   // authService.me() (GET /auth/me) instead, which returns the same
   // UserOut shape the login/register flow already populates the store
   // with, tosAccepted/tosAcceptedAt included.
+  const hasSyncedRef = useRef(false);
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading || !user || hasSyncedRef.current) return;
+    hasSyncedRef.current = true;
     let cancelled = false;
     authService
       .me()
@@ -62,7 +64,14 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [loading, user]);
+    // Intentionally runs once per mount, not on every `user` change — this
+    // effect's own success handler calls updateUser(), which replaces the
+    // `user` object reference. Depending on `user` here previously caused
+    // the effect to cancel and re-fire itself on every sync, so `syncing`
+    // could get stuck true forever if a run was cancelled before its
+    // `finally` landed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   async function updatePrivacyChoice(accepted: boolean) {
     setError(null);
