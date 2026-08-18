@@ -63,13 +63,13 @@ export const PRIVACY_TERMS: PrivacyTermsSection[] = [
   {
     heading: "Storage and retention",
     body: [
-      "Transcripts, tags, and (if enabled) session recordings are stored in this deployment's database and object storage. [ADD: how long records are retained, and whether/how they're deleted after a session, project, or academic term ends.]",
+      "Transcripts, tags, and (if enabled) session recordings are stored in this deployment's database and object storage for the duration of the project. They are retained until the project concludes, at which point they are deleted unless a longer retention period is required for research records or legal compliance.",
     ],
   },
   {
     heading: "Who can access your data",
     body: [
-      "Session records are visible to the session's owner and to participants who were part of that session. [ADD: whether any administrator, researcher, or supervisor role has broader access, and under what circumstances.]",
+      "Session records are visible to the session's owner and to participants who were part of that session. Administrators, researchers, or supervisors affiliated with the project may also request access to session records for project oversight, research, or supervisory purposes.",
     ],
   },
   {
